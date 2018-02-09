@@ -1,4 +1,3 @@
-# Wonderware Online InSight
 Wonderware Online InSight Tools
 ===============================
 
