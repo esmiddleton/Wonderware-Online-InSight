@@ -10,21 +10,23 @@ const ONLINE_PATH = "/apis/upload/datasource";
 
 
 function transform(input, offsetMinutes) {
-    var compactFormat = (input.lines[0].trim().substr(0,12).toLowerCase()=='gateway name');
     var output;
-    if (compactFormat) {
-        output=transformCompact( input.lines, offsetMinutes);
+    var isWideFormat = (input.lines[0].trim().substr(0,12).toLowerCase()=='gateway name');
+    if (isWideFormat) {
+        output=transformWide(input.lines, offsetMinutes);
     } else {
-        output=transformComX( input.lines, offsetMinutes);
+        output=transformNarrow(input.lines, offsetMinutes);
     }
     return output;
 }
 
-function transformCompact(lines, offsetMinutes) {
+// Transforms a ComX CSV in a "wide" format which has a 7-line header
+// Creates tag names with the "Device Name" in the header as a prefix to the "wide" column heading
+function transformWide(lines, offsetMinutes) {
     var output = [];
     
     var deviceParts = lines[1].split(",");
-    var baseTag = spacesToCamelCase(deviceParts[4]);
+    var baseTag = spacesToCamelCase(deviceParts[4]); // The "Device Name" from the header
 
     var tags = [];
     var header = lines[6].split(',');
@@ -60,7 +62,8 @@ function transformCompact(lines, offsetMinutes) {
     return output;
 }
 
-function transformComX(lines, offsetMinutes) {
+// Transforms a ComX CSV in a "narrow" format which has a 1-line header
+function transformNarrow(lines, offsetMinutes) {
     var output = [];
     
     for (var i=1; i< lines.length; i++) {
