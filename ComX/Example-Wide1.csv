@@ -1,0 +1,11 @@
+Gateway Name,Gateway SN,Gateway IP Address,Gateway MAC Address,Device Name,Device Local ID,Device Type ID,Device Type Name,Logging Interval,Historical Intervals
+Demo Room ComX510,DN15315SE000036,192.168.10.40,00:80:67:F9:62:F8,Compact NSX E_6,19,10000,Compact NSX E,15,4
+
+,,,Topic ID1,Topic ID2,Topic ID3,Topic ID4
+,,,1601,1605,1621,1625
+
+Error,UTC Offset (minutes),Local Time Stamp,Active energy delivered (Wh),Reactive energy delivered (VArh),Active energy (Wh),Reactive energy (VArh)
+0,0,05-22-2017 09:00:00,0,0,0,0
+0,0,05-22-2017 09:15:00,0,0,0,0
+0,0,05-22-2017 09:30:00,0,0,0,0
+0,0,05-22-2017 09:45:00,0,0,0,0
