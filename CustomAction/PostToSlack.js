@@ -2,7 +2,7 @@
 /* jshint esversion: 6 */
 "use strict";
 
-const MY_KEY="TM...QzgX1";
+const MY_KEY="TM...QzgX1";  // Replace with your real API value
 const UTC_MINUTES=-7*60;
 
 const https = require('https');
