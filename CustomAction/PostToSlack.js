@@ -6,13 +6,44 @@ const DEFAULT_UTC_MINUTES=-7*60;
 
 const https = require('https');
 
-
+//
 // Process an AVEVA Insight "Custom Action" alert
 // and post it to Slack
+//
+
+/*
+
+	Usage:
+	
+		https://...?webhook=TM8G....y4&offsetmins=-480&channel=general
+	
+	Parameters (all are case-sensitive):
+	
+		webhook		The Web Hook created in Slack (required)
+		
+		offsetmins	The minutes local time is offset from local time. Due to current
+					limitations in the Insight Chart API, this is required to generate
+					the chart URL in the message correctly. Defaults to "-480".
+					
+		channel		Overrides the default channel associated with the Web Hook to direct
+					the message to an alternate channel. You may omit the "#" prefix, but
+					if it is included it must be URL encoded.
+					
+						Okay:
+								general
+								%23general
+						
+						Wrong:
+						
+								#general
+	
+*/
+
 //
 // 9-Aug-2019
 // E. Middleton
 //
+
 exports.handler = (event, context, callback) => {
     if ((event.queryStringParameters !== null) && (event.queryStringParameters.webhook !== null)) { // Parse the query string
         var slackWebHook = event.queryStringParameters.webhook;
