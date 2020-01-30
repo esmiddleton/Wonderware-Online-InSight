@@ -25,8 +25,8 @@
 #
 
 # PROXY: If using DMZ Secure Link, use the IP address of the computer running it and the configured port 
-$ProxyIP = "192.168.90.65"
-$ProxyPort = 8888
+$ProxyIP = "192.168.80.15"
+$ProxyPort = 8080
 
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
 $InsightHost = "online.wonderware.com"
@@ -327,7 +327,10 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
         if ($HttpResult -eq -1) {
             Write-Host -ForegroundColor Red "Failed HTTP connection because TLS 1.2 was not available to Powershell"
             Write-Host -ForegroundColor Cyan "    Your system may require updates to get support for the required security protocols for Insight"
-        }
+    } else {
+        Write-Host -ForegroundColor Red "Failed HTTP connection to '$($InsightUri)' via proxy at '$($ProxyUri)' (Status $($HttpResult))"
+        Write-Host -ForegroundColor Cyan "    The outbound connections from the proxy may be blocked or there may be security protocol problems"
+        } 
     }
 } else {
     Write-Host -ForegroundColor Red "Failed to open TCP connection to proxy at '$($ProxyUri)'"
