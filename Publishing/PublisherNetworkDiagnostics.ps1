@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 28-Jan-2020
+# Modified: 30-Jan-2020
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -30,6 +30,7 @@ $ProxyPort = 8888
 
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
 $InsightHost = "online.wonderware.com"
+$CheckBlockedUri = "http://www.apple.com"
 
 #
 # END OF SITE-SPECIFIC SETTINGS
@@ -76,22 +77,34 @@ Function Check-Http( $Uri, $ProxyUri ) {
     $Http.Accept = "text/html"
     $Http.Proxy = New-Object System.Net.WebProxy($ProxyUri)
     $Http.Timeout = 5000
+    $Http.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36"
 
     if ( [Enum]::GetValues([Net.SecurityProtocolType]) -Like "Tls12" ) {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13 
+        #[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13 -bor [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::ssl
     }
 
     try {
         $response = $Http.GetResponse()
         $status = [int]$response.StatusCode
-    } catch {
-        if ($_.Exception.HResult -eq -2146233087 -or $_.Exception.InnerException.Message -eq "The underlying connection was closed: An unexpected error occurred on a send.") {
-            $status = -1
+    } catch [System.Net.WebException] {
+        if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::ProtocolError) {
+            $status = 406
         } else {
-            Write-Verbose "Error attempting to get '$($Uri)': $($_.Exception.Message)"
-            if ($_.Exception.HResult) {
-                $status = $_.Exception.HResult
+            if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::TrustFailure) {
+                $status = -2
+            } else {
+                if ($_.Exception.HResult -eq -2146233087 -or $_.Exception.InnerException.Message -eq "The underlying connection was closed: An unexpected error occurred on a send.") {
+                    $status = -1
+                } else {
+                    $status = [int]$_.Exception.Status
+                }
             }
+        }
+    } catch {
+        Write-Verbose "Error attempting to get '$($Uri)': $($_.Exception.Message)"
+        if ($_.Exception.HResult) {
+            $status = $_.Exception.HResult
         }
     } finally {
         $response = $null
@@ -303,11 +316,11 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
         [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
         
         # DMZ Secure Link: Confirm a site that is not part of the whitelist is blocked
-        $BlockedStatus = Check-Http "https://www.aveva.com" $ProxyUri
-        if ($BlockStatus -eq 406) {
-            Write-Host "DMZ Secure Link correctly blocked access to 'https://www.aveva.com'"
+        $BlockedStatus = Check-Http $CheckBlockedUri $ProxyUri
+        if ($BlockedStatus -eq 406) {
+            Write-Host "DMZ Secure Link correctly blocked access to '$($CheckBlockedUri)'"
         } else {
-            Write-Host -ForegroundColor Red "Access to 'https://www.aveva.com' was NOT blocked"
+            Write-Host -ForegroundColor Red "Access to '$($CheckBlockedUri)' was NOT blocked"
             Write-Host -ForegroundColor Cyan "    If the proxy specified is DMZ Secure Link, that should be blocked. Other proxies might permit access."
         }
     } else {
