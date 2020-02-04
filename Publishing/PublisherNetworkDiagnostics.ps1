@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 30-Jan-2020
+# Modified: 4-Feb-2020
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -70,7 +70,7 @@ Function Check-Route( $HostOrIP ) {
     return $result
 }
 
-Function Check-Http( $Uri, $ProxyUri ) {
+Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
     $status = 0
     $Http = [System.Net.WebRequest]::Create($Uri)
     $Http.Method = "GET"
@@ -87,6 +87,16 @@ Function Check-Http( $Uri, $ProxyUri ) {
     try {
         $response = $Http.GetResponse()
         $status = [int]$response.StatusCode
+        if ($ReturnData -and $status -eq 200) {
+            $stream = $response.GetResponseStream()
+            $reader = New-Object IO.StreamReader $stream
+            $json = $reader.ReadToEnd() | ConvertFrom-Json
+            $data = $json.Data | ConvertFrom-Json
+            $json = $null
+            $reader = $null
+            $stream = $null
+            $status = $data
+        }
     } catch [System.Net.WebException] {
         if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::ProtocolError) {
             $status = 406
@@ -196,6 +206,24 @@ Function Report-Port($label, $hostname, $port)
     return $TcpResult
 }
 
+Function Report-Host($Uri, $ProxyUri, $Required) 
+{
+    $HttpResult = $null
+    $HttpResult = Check-Http $Uri $ProxyUri $false
+    if ($HttpResult -eq 200) {
+        $hostname = ([System.Uri]$Uri).Host
+        Write-Host -ForegroundColor Green "Successfully reached '$($hostname)' via proxy"
+    } else {
+        if ($Required) {
+            Write-Host -ForegroundColor Red "Failed to reach host '$($hostname)' via proxy"
+        } else {
+            Write-Host -ForegroundColor Red "Failed to reach optional host '$($hostname)' via proxy"
+        }
+        Write-Host -ForegroundColor Cyan "    This may mean the proxy is not correctly configured"
+    }
+    return $HttpResult
+}
+
 Function ValueFromRegistry( $RegKey, $RegValue )
 {
     try {
@@ -273,7 +301,7 @@ Write-Host  "Testing connectivity to '$($InsightUri)' via proxy '$($ProxyUri)'"
 if (Report-Port "proxy" $ProxyIP $ProxyPort) {
     # Confirm the proxy can reach a AVEVA Insight endpoint
     $HttpResult = $null
-    $HttpResult = Check-Http $InsightUri $ProxyUri $null
+    $HttpResult = Check-Http $InsightUri $ProxyUri $false
 
     # Check the certificate (adapted from https://communary.net/2017/08/16/retrieve-ssl-certificate-information/)
     # This helps confirm we're really reaching the site and not just getting a response from the proxy
@@ -316,13 +344,24 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
         [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
         
         # DMZ Secure Link: Confirm a site that is not part of the whitelist is blocked
-        $BlockedStatus = Check-Http $CheckBlockedUri $ProxyUri
+        $BlockedStatus = Check-Http $CheckBlockedUri $ProxyUri $false
         if ($BlockedStatus -eq 406) {
             Write-Host "DMZ Secure Link correctly blocked access to '$($CheckBlockedUri)'"
         } else {
             Write-Host -ForegroundColor Red "Access to '$($CheckBlockedUri)' was NOT blocked"
             Write-Host -ForegroundColor Cyan "    If the proxy specified is DMZ Secure Link, that should be blocked. Other proxies might permit access."
         }
+
+        $list = Check-Http($InsightUri + "/apis/wwocorefunctions/api/OnlineConfigPush?config=publisher") $ProxyUri $true
+        #$list = Check-Http("http://192.168.200.90/test/insighthosts.json") $ProxyUri $true
+        if ($list.PSobject.Properties.Name -contains "URLs") {
+             Write-Host -ForegroundColor Green "Successfully retrieved list of key URLs used by Insight from '$($InsightUri)'"
+             $list.URLs | ForEach-Object -Process { $HttpResult = Report-Host $_.URL $ProxyUri $_.AccessMandatory }
+        } else {
+             Write-Host -ForegroundColor Red "Unable to retrieve list of needed sites from Insight"
+             Write-Host -ForegroundColor Cyan "    This may mean the proxy is not correctly configured"
+        }
+
     } else {
         if ($HttpResult -eq -1) {
             Write-Host -ForegroundColor Red "Failed HTTP connection because TLS 1.2 was not available to Powershell"
