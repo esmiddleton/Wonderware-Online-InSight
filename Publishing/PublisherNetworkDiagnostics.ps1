@@ -25,8 +25,8 @@
 #
 
 # PROXY: If using DMZ Secure Link, use the IP address of the computer running it and the configured port 
-$ProxyIP = "192.168.80.15"
-$ProxyPort = 8080
+$ProxyIP = "incrediblepbx."
+$ProxyPort = 8888
 
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
 $InsightHost = "online.wonderware.com"
@@ -63,7 +63,7 @@ Function Check-Port($HostOrIP, $Port) {
 
 Function Check-Route( $HostOrIP ) {
     try {
-        $result = Find-NetRoute -RemoteIPAddress $HostOrIP
+        $result = Find-NetRoute -RemoteIPAddress (Get-IpAddress $HostOrIP)
     } catch {
         $result = $null
     }
@@ -125,7 +125,7 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
 }
 
 
-Function Get-Address ( $AddressList ) {
+Function Get-FirstAddress ( $AddressList ) {
     $first = $AddressList | Select-Object -First 1
     return $first.Trim()
 }
@@ -145,6 +145,19 @@ Function Get-UserProxy
         }
     }    
     return $proxy
+}
+
+Function Get-IpAddress ($HostOrIP) {
+    if ([Uri]::CheckHostName($HostOrIP) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($HostOrIP) -eq [UriHostNameType]::IPv6) {
+        $ip = $HostOrIP
+    } else {
+        try {
+            $ip = ([System.Net.Dns]::GetHostEntry($hostname)).IPAddressToString
+        } catch {
+            $ip = ""
+        }
+    }
+    return $ip
 }
 
 Function Get-SystemProxy {
@@ -178,7 +191,6 @@ Function Report-Ping($label, $hostname)
         Write-Host -ForegroundColor Red "Failed 'ping' to $($label) at '$($hostname)'"
         Write-Host -ForegroundColor Cyan "    This could mean that ICMP is disabled, the system is offline or that TCP route/gateway is not correctly configured"
     }
-    return $Response
 }
 
 Function Report-Port($label, $hostname, $port) 
@@ -195,7 +207,7 @@ Function Report-Port($label, $hostname, $port)
         } else {
             $route = Check-Route $hostname
             if ($route) {
-                Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)' from '$(Get-Address($route.IPAddress))' using route via '$(Get-Address($Route.NextHop))'"
+                Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)' from '$(Get-FirstAddress($route.IPAddress))' using route via '$(Get-FirstAddress($Route.NextHop))'"
             } else {
                 Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)'"
             }
@@ -230,21 +242,26 @@ Function Report-Uri( $Uri )
     $hostname = ([System.Uri]$Uri).Host
     try {
         $ip = ([System.Net.Dns]::GetHostEntry($hostname)).AddressList | Select-Object -ExpandProperty "IPAddressToString"
+    } catch {
+        $ip = ""
+    }
+
+    if ([String]::IsNullOrEmpty($ip)) {
+        if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
+            Write-Verbose "'$($hostname)' is recognized as an IP address"
+        } else {
+            Write-Host -ForegroundColor Red "Failed to resolve hostname '$($hostname)'"
+        }
+    } else {
         if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Dns ) {
-            Write-Host -ForegroundColor Green "Hostname '$($hostname)' resolved to '$($ip -Join "', '")'"
+            Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' to '$($ip -Join "', '")'"
         } else {
             if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Basic) {
-                Write-Host -ForegroundColor Green "Hostname '$($hostname)' basic address is '$($ip -Join "', '")'"
+                Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' as basic address '$($ip -Join "', '")'"
             } else {
-                if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
-                    Write-Verbose "'$($hostname)' is recognized as an IP address"
-                } else {
-                    Write-Host -ForegroundColor Cyan "    Potential problem resolving '$($hostname)' as '$($ip)'"
-                }
+                Write-Host -ForegroundColor Cyan "    Potential problem resolving '$($hostname)' as '$($ip)'"
             }
         }
-    } catch {
-        Write-Host -ForegroundColor Red "Hostname '$($hostname)' was not resolved"
     }
 }
 
@@ -409,12 +426,12 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
     # Check the route
     $Route = Check-Route $ProxyIP
     if ($Route) {
-        $next = Get-Address($Route.NextHop)
+        $next = Get-FirstAddress($Route.NextHop)
         if ($next -ne "0.0.0.0") {
             Write-Host "Route to proxy is on '$($next)' via '$($next)'"
             Report-Ping "gateway" $next
         } else {
-            Write-Host "Proxy is on the local network for '$(Get-Address($Route.IPAddress))'"
+            Write-Host "Proxy is on the local network for '$(Get-FirstAddress($Route.IPAddress))'"
         }
     } else {
         Write-Host "Route details not available"
