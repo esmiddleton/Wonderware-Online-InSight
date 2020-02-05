@@ -25,7 +25,7 @@
 #
 
 # PROXY: If using DMZ Secure Link, use the IP address of the computer running it and the configured port 
-$ProxyIP = "incrediblepbx."
+$ProxyIP = "192.168.80.15"
 $ProxyPort = 8888
 
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
