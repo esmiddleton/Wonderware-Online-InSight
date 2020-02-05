@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 4-Feb-2020
+# Modified: 5-Feb-2020
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -214,6 +214,7 @@ Function Report-Host($Uri, $ProxyUri, $Required)
         $hostname = ([System.Uri]$Uri).Host
         Write-Host -ForegroundColor Green "Successfully reached '$($hostname)' via proxy"
     } else {
+        Report-Uri $Uri
         if ($Required) {
             Write-Host -ForegroundColor Red "Failed to reach host '$($hostname)' via proxy"
         } else {
@@ -222,6 +223,29 @@ Function Report-Host($Uri, $ProxyUri, $Required)
         Write-Host -ForegroundColor Cyan "    This may mean the proxy is not correctly configured"
     }
     return $HttpResult
+}
+
+Function Report-Uri( $Uri )
+{
+    $hostname = ([System.Uri]$Uri).Host
+    try {
+        $ip = ([System.Net.Dns]::GetHostEntry($hostname)).AddressList | Select-Object -ExpandProperty "IPAddressToString"
+        if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Dns ) {
+            Write-Host -ForegroundColor Green "Hostname '$($hostname)' resolved to '$($ip -Join "', '")'"
+        } else {
+            if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Basic) {
+                Write-Host -ForegroundColor Green "Hostname '$($hostname)' basic address is '$($ip -Join "', '")'"
+            } else {
+                if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
+                    Write-Verbose "'$($hostname)' is recognized as an IP address"
+                } else {
+                    Write-Host -ForegroundColor Cyan "    Potential problem resolving '$($hostname)' as '$($ip)'"
+                }
+            }
+        }
+    } catch {
+        Write-Host -ForegroundColor Red "Hostname '$($hostname)' was not resolved"
+    }
 }
 
 Function ValueFromRegistry( $RegKey, $RegValue )
@@ -296,6 +320,10 @@ Write-Host  "Testing connectivity to '$($InsightUri)' via proxy '$($ProxyUri)'"
 
 # Use variations on the lines below, uncommented, for other test cases
 #PortCheck "rdp" "myhostname" 3389
+
+# Confirm we can resolve the names (but only if these aren't IP address)
+Report-Uri $InsightUri
+Report-Uri $ProxyUri
 
 # Confirm we can reach the proxy/DMZ Secure Link
 if (Report-Port "proxy" $ProxyIP $ProxyPort) {
@@ -399,6 +427,11 @@ Write-Host "The user's 'Internet Options' proxy is '$($UserProxy)'"
 
 $SystemProxy = Get-SystemProxy
 Write-Host "The system WinHTTP proxy is '$($SystemProxy)'"
-if ($SystemProxy -ne $ProxyUri -or $UseProxy -ne $ProxyUri -or $SystemProxy -ne $UserProxy) {
+if ($SystemProxy -ne $ProxyUri -or $UserProxy -ne $ProxyUri -or $SystemProxy -ne $UserProxy) {
     Write-Host -ForegroundColor Cyan "    The user & system proxies should usually be consistent with '$($ProxyUri)'"
+
+    # Confirm we can resolve the names (but only if these aren't IP address)
+    Report-Uri $SystemProxy
+    Report-Uri $UserProxy
+
 }
