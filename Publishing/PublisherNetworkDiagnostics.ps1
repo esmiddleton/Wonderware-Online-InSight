@@ -25,7 +25,7 @@
 #
 
 # PROXY: If using DMZ Secure Link, use the IP address of the computer running it and the configured port 
-$ProxyIP = "192.168.80.15"
+$ProxyIP = "192.168.200.90"
 $ProxyPort = 8888
 
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
@@ -240,27 +240,22 @@ Function Report-Host($Uri, $ProxyUri, $Required)
 Function Report-Uri( $Uri )
 {
     $hostname = ([System.Uri]$Uri).Host
-    try {
-        $ip = ([System.Net.Dns]::GetHostEntry($hostname)).AddressList | Select-Object -ExpandProperty "IPAddressToString"
-    } catch {
-        $ip = ""
-    }
-
-    if ([String]::IsNullOrEmpty($ip)) {
-        if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
-            Write-Verbose "'$($hostname)' is recognized as an IP address"
-        } else {
-            Write-Host -ForegroundColor Red "Failed to resolve hostname '$($hostname)'"
-        }
+    if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
+        Write-Verbose "'$($hostname)' is recognized as an IP address"
     } else {
-        if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Dns ) {
-            Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' to '$($ip -Join "', '")'"
-        } else {
-            if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Basic) {
-                Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' as basic address '$($ip -Join "', '")'"
+        try {
+            $ip = ([System.Net.Dns]::GetHostEntry($hostname)).AddressList | Select-Object -ExpandProperty "IPAddressToString"
+            if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Dns ) {
+                Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' to '$($ip -Join "', '")'"
             } else {
-                Write-Host -ForegroundColor Cyan "    Potential problem resolving '$($hostname)' as '$($ip)'"
+                if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Basic) {
+                    Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' as basic address '$($ip -Join "', '")'"
+                } else {
+                    Write-Host -ForegroundColor Cyan "    Potential problem resolving '$($hostname)' as '$($ip)'"
+                }
             }
+        } catch {
+            Write-Host -ForegroundColor Red "Failed to resolve hostname '$($hostname)'"
         }
     }
 }
