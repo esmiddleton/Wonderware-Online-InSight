@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 21-Feb-2020
+# Modified: 21-Feb-2020 (revised)
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -32,6 +32,9 @@ $ProxyPort = ""
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
 $InsightHost = "online.wonderware.com"
 $CheckBlockedUri = "http://www.apple.com"
+
+$VerbosePreference = "SilentlyContinue" # Don't include more detailed tracing
+#$VerbosePreference = "Continue" # Include more detailed tracing output
 
 #
 # END OF SITE-SPECIFIC SETTINGS
@@ -70,7 +73,7 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
     $status = 0
     $Http = [System.Net.WebRequest]::Create($Uri)
     $Http.Method = "GET"
-    $Http.Accept = "text/html,application/json"
+    $Http.Accept = "*/*"
     $Http.AllowAutoRedirect = $false
     $Http.Proxy = New-Object System.Net.WebProxy($ProxyUri)
     $Http.Timeout = 10000
@@ -83,17 +86,21 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
     try {
         $response = $Http.GetResponse()
         $status = [int]$response.StatusCode
-        if ($ReturnData -and ($status -eq 200 -or $status -eq 301) ) {
-            $stream = $response.GetResponseStream()
-            $reader = New-Object IO.StreamReader $stream
-            $json = $reader.ReadToEnd() | ConvertFrom-Json
-            $data = $json.Data | ConvertFrom-Json
-            $json = $null
-            $reader.Close()
-            $reader = $null
-            $stream.Close()
-            $stream = $null
-            $status = $data
+        if ($status -eq 200 -or $status -eq 301 -or $status -eq 302 ) {
+            if ($ReturnData) {
+                $stream = $response.GetResponseStream()
+                $reader = New-Object IO.StreamReader $stream
+                $json = $reader.ReadToEnd() | ConvertFrom-Json
+                $data = $json.Data | ConvertFrom-Json
+                $json = $null
+                $reader.Close()
+                $reader = $null
+                $stream.Close()
+                $stream = $null
+                $status = $data
+            }
+        } else {
+            Write-Verbose "Request for '$($Uri)' returned an unexpected result: $($status), $($response.StatusCode)"
         }
         $response.Close()
     } catch [System.Net.WebException] {
@@ -182,6 +189,112 @@ Function Get-SystemProxy {
        return $result                  
 }
 
+Function Get-ProxyFromConfigFile( $path ) {
+    try {
+        [xml]$config = Get-Content $path -ErrorAction Stop
+    } catch {
+        Write-Verbose "Error reading proxy configuration from '$($path)': $($_.Exception.Message)"
+        return $null
+    }
+
+    try {
+        $default = $config.configuration.'system.net'.defaultProxy
+        if ($default.enabled -eq $true) {
+            $status = "enabled as"
+        } else {
+            $status = "disabled, but set to"
+        }
+        if ($default.proxy.usesystemdefault -eq $true) {
+            $status += " the default system proxy"
+            $proxy = Get-SystemProxy
+        } else {
+            $proxy = $default.proxy.proxyaddress
+        }        
+        Write-Verbose "A default proxy specified in '$($path)' is $($status) '$($proxy)'"
+        return $proxy -replace "\/$",""
+    } catch {
+        return $null
+    }
+}
+
+Function Get-ProxyFromConnectionString( $connectionstring ) {
+    try {
+        $proxy = (($connectionstring -split ";")[1] -split "=")[1]
+        # Strip off leading " and trailing " or /
+        return $proxy -replace "^""","" -replace "\/$","" -replace """$",""
+    } catch {
+        if ($connectionstring.Length -gt 20) {
+            Write-Verbose "Error parsing connection string '$($connectionstring.Substring(0,20))...': $($_.Exception.Message)"
+        } else {
+            Write-Verbose "Error parsing connection string '$($connectionstring)...': $($_.Exception.Message)"
+        }
+        return $null
+    }
+}
+
+Function Get-ProxyFromConnectionFile( $path ) {
+    return Get-ProxyFromConnectionString (Get-DetailsFromConnectionFile $path )
+}
+
+Function Get-DetailsFromConnectionFile( $path ) {
+    try {
+        [xml]$config = Get-Content $path -ErrorAction Stop
+        $connectionString = $config.idasConfiguration.details
+        return $connectionString
+    } catch {
+        Write-Verbose "Error reading connection file '$($path)': $($_.Exception.Message)"
+        return $null
+    }
+}
+
+Function Report-ProxyList( $Heading, $List ) {
+    if ($List.Count -gt 0) {
+        Write-Host -NoNewline "$($Heading) proxies:"
+        $List | ForEach-Object {
+            Add-Member -InputObject $_ -Name "Label" -Value ("   $($_.Name): " ) -MemberType NoteProperty
+            $Proxy = Get-ProxyFromConnectionString $_.Details
+            if ($Proxy -eq "") {
+                $Proxy = "Not specified"
+            }
+            Add-Member -InputObject $_ -Name "Proxy" -Value $Proxy -MemberType NoteProperty
+        }
+    }
+    $List | Format-Table -HideTableHeaders Label,Proxy     
+}
+
+Function Report-ProxyFromReplicationServers( ) {
+    try {
+        $Servers = Invoke-Sqlcmd -Database "Runtime" -ConnectionTimeout 2 -QueryTimeout 2 -ErrorAction stop -OutputSqlErrors $false -Query "select Name=ReplicationServerName, Details=ConnectionDetails from ReplicationServer where ConnectionDetails is not null"
+    } catch {
+        Write-Verbose "Error connecting to local Historian to get Replication Servers: $($_.Exception.Message)"
+        return ""
+    }
+    Report-ProxyList "Replication Servers" $Servers
+}
+
+Function Report-ProxyFromConnectionFiles( ) {
+    try {
+        $Files = Get-ChildItem -Path "$env:ProgramData\ArchestrA\Historian\IDAS\Configurations\" -Filter "*.xml" -ErrorAction stop
+        $Files | ForEach-Object {
+            Add-Member -InputObject $_ -Name "Details" -Value (Get-DetailsFromConnectionFile $_.FullName) -MemberType NoteProperty
+        }
+        Report-ProxyList "Publisher Configuration" $Files
+    } catch {
+        Write-Verbose "Error getting Publisher configuration files: $($_.Exception.Message)"
+        return ""
+    }
+}
+
+Function Report-ProxyFromConfigFile( $label, $path ) {
+    $proxy = Get-ProxyFromConfigFile $path
+    if ($proxy -eq "") {
+        Write-Host "$($label) file proxy: Not specified"
+    } else {
+        if ($proxy -ne $null) {
+            Write-Host "$($label) file proxy: $($proxy)"
+        }
+    }
+}
 
 Function Report-Ping($label, $hostname) 
 {
@@ -244,7 +357,7 @@ Function Report-Uri($Uri, $ProxyUri, $Required)
     $HttpResult = $null
     $HttpResult = Check-Http $Uri $ProxyUri $false
     $hostname = ([System.Uri]$Uri).Host
-    if ($HttpResult -eq 200) {
+    if ($HttpResult -eq 200 -or $HttpResult -eq 301 -or $HttpResult -eq 302) {
         Write-Host -ForegroundColor Green "Successfully reached '$($hostname)' via proxy"
     } else {
         if ($Required) {
@@ -458,6 +571,12 @@ Write-Host (GetFileVersion "Publisher" (ValueFromRegistry ("HKLM:\SOFTWARE\Arche
 Write-Host (GetFileVersion "DMZ Secure Link" (ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\SecureLink\Setup") "LaunchTarget"))
 
 Write-Host " "
+Report-ProxyFromConfigFile "Replication (64-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "x64\aahReplication.exe.config")
+Report-ProxyFromConfigFile "Replication (32-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "aahReplication.exe.config")
+Report-ProxyFromConfigFile "Publisher" ((ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\HistorianPublisher\Setup") "LaunchTarget") + "\aahIDAS.exe.config")
+Report-ProxyFromReplicationServers
+Report-ProxyFromConnectionFiles
+
 Write-Host  "Testing connectivity to '$($InsightUri)' via proxy '$($ProxyUri)'"
 
 # Check the route
@@ -580,4 +699,5 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
 
 }
 
+Write-Host " "
 Write-Host "Tests completed at $(Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")"
