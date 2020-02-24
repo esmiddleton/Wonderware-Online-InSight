@@ -30,7 +30,7 @@ Publisher Configuration proxies:
 
 
 Testing connectivity to 'https://online.wonderware.com' via proxy 'http://192.168.2.15:8080'
-The proxy is on the local network for '192.168.1.55' using interface #7
+Route to proxy at '192.168.2.15' is on '192.168.1.55' via gateway of '192.168.1.10' using interface #7
 Successfully reached proxy at '192.168.2.15' on port '8080'
 Successfully connected to 'https://online.wonderware.com' via proxy
 The certifcate for 'https://online.wonderware.com' appears to be valid
