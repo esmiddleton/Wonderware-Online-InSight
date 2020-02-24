@@ -1,5 +1,5 @@
-Wonderware Online InSight Tools
-===============================
+Wonderware Online/AVEVA Insight Tools
+=====================================
 
 This is a collection of tools that work with Wonderware Online Insight/AVEVA Insight. These are all UNSUPPORTED and offered here as a service to others.
 
