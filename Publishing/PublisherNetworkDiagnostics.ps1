@@ -74,7 +74,7 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
     $Http = [System.Net.WebRequest]::Create($Uri)
     $Http.Method = "GET"
     $Http.Accept = "*/*"
-    #$Http.AllowAutoRedirect = $false
+    $Http.AllowAutoRedirect = $false
     $Http.Proxy = New-Object System.Net.WebProxy($ProxyUri)
     $Http.Timeout = 10000
     $Http.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36"
