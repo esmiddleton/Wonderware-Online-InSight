@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 21-Feb-2020 (revised)
+# Modified: 24-Feb-2020
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -74,7 +74,7 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
     $Http = [System.Net.WebRequest]::Create($Uri)
     $Http.Method = "GET"
     $Http.Accept = "*/*"
-    $Http.AllowAutoRedirect = $false
+    #$Http.AllowAutoRedirect = $false
     $Http.Proxy = New-Object System.Net.WebProxy($ProxyUri)
     $Http.Timeout = 10000
     $Http.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36"
@@ -107,7 +107,11 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
         if ($_.Exception.HResult -eq -2146233087 -or $_.Exception.Status -eq [System.Net.WebExceptionStatus]::SendFailure) {
             $status = -1
         } else {
-            $status = [int]$_.Exception.Status
+            if ($_.Exception.Message -Like "*(403)*" -or $_.Exception.Message -Like "*(406)*") {
+                $status = 406
+            } else {
+                $status = [int]$_.Exception.Status
+            }
         }
     } catch {
         Write-Verbose "Error attempting to get '$($Uri)': $($_.Exception.Message)"
@@ -502,6 +506,24 @@ $SystemProxy = Get-SystemProxy
 Write-Host "The system WinHTTP proxy is '$($SystemProxy)'"
 if ($SystemProxy -ne $ProxyUri -or $UserProxy -ne $ProxyUri -or $SystemProxy -ne $UserProxy) {
     Write-Host -ForegroundColor Cyan "   The user & system proxies should usually be consistent with '$($ProxyUri)'"
+}
+
+# Try to read local DMZ Secure Link configuration
+try {
+    $DMZConfig = Get-Content "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration\Config.json" -ErrorAction Stop | ConvertFrom-Json
+    $Upstream = "$($DMZConfig.UpstreamProxy.Address -Replace "\/$",""""):$($DMZConfig.UpstreamProxy.Port)"
+    if ($DMZConfig.UpstreamProxy.Address -like "") {
+        $Upstream = "without a forward proxy"
+    } else {
+        $Upstream = "forwarding to '$($DMZConfig.UpstreamProxy.Address -Replace "\/$",""""):$($DMZConfig.UpstreamProxy.Port)'"
+    }
+    if ($DMZConfig.Server.Address -like "") {
+        $DMZServer = "(all addresses), Port: $($DMZConfig.Server.Port)"
+    } else {
+        $DMZServer = "$($DMZConfig.Server.Address -Replace "\/$",""""):$($DMZConfig.Server.Port)"
+    }
+    Write-Host "DMZ Secure Link is listening on $($DMZServer) and $($Upstream)"
+} catch {
 }
 
 # Get summary information about all network interfaces
