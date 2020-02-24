@@ -27,3 +27,4 @@ Example output from running this script on the Publisher node and on the DMZ Sec
 Manual Tests
 ------------
 The core of the more comprehensive "PublisherNetworkDiagnostics.ps1" script is a few Powershell commands to test ports and HTTP requests. For those who want to do their own targeted tests, the "ManualPublisherTests.ps1" provides some useful examples/reference.
+![Example Network for Insight](https://user-images.githubusercontent.com/20399082/75187015-01cb3d00-56fe-11ea-8bb4-4c3a325bce2a.PNG)
