@@ -7,6 +7,10 @@ DMZ
 ---
 Although these tools can be useful in other architectures, they assume the Publisher is deployed behind a DMZ which protects against general Internet access and that a web proxy, such as AVEVA's [DMZ Secure Link](https://online.wonderware.com/Downloads/InsightPublisher/DMZSecureLink.zip "free DMZ Secure Link download"), is installed on a Windows system within the DMZ. 
 
+Tutorial
+--------
+There is also a [brief video tutorial](https://1drv.ms/v/s!AqHkJ_gHT62Qgb4C-z5HrEpHya8zxQ?e=j7AnHM "Watch") describing the architecture and network configuration
+
 Publisher Network Diagnostics
 -----------------------------
 
@@ -20,6 +24,6 @@ A full diagnostics script to use to report on most network and Publisher-related
 
 Example output from running this script on the Publisher node and on the DMZ Secure Link node are also included.
 
-Tutorial
---------
-There is also a [brief video tutorial](https://1drv.ms/v/s!AqHkJ_gHT62Qgb4C-z5HrEpHya8zxQ?e=j7AnHM "Watch") describing the architecture and network configuration
+Manual Tests
+------------
+The core of the more comprehensive "PublisherNetworkDiagnostics.ps1" script is a few Powershell commands to test ports and HTTP requests. For those who want to do their own targeted tests, the "ManualPublisherTests.ps1" provides some useful examples/reference.
