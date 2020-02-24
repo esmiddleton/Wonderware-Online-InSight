@@ -1,0 +1,54 @@
+2020-02-24 09:43:29 -08:00
+HISTSRV (SCADA workgroup)
+Windows 10 Pro (64-bit) 1909 (18363)
+Powershell 5.1 (64-bit), CLR 4.0.30319 (Standard User)
+User: HISTSRV\Lenka
+Powershell Security Protocols: Tls, Tls11, Tls12, Tls13
+.NET Require Strong Cryptography: No (default to TLS 1.0)
+   Publisher versions released before Dec-2018 will not be able to connect to Insight
+The user's 'Internet Options' proxy is 'http://192.168.2.15:8080'
+The system WinHTTP proxy is ''
+   The user & system proxies should usually be consistent with 'http://192.168.2.15:8080'
+Gathering details about all network interfaces...
+
+ID Interface                                IPAddress             Source Gateway      Destination Network       Status Type Count
+-- ---------                                ---------             ------ -------      ----------- -------       ------ ---- -----
+ 7 Intel(R) PRO/1000 MT Network Connection  192.168.1.55/24       Manual 192.168.1.10 0.0.0.0/0    Public LocalNetwork IPv4     1
+
+
+Historian: 2020.0205.3322.11 05-Feb-2020
+Publisher: 2020.0205.2591.6 05-Feb-2020
+DMZ Secure Link: Not found
+ 
+Replication (64-bit) file proxy: Not specified
+Replication Servers proxies:
+   Online:   http://192.168.2.15:8080
+
+
+Publisher Configuration proxies:
+   idatacfg_S-1-5-21-3245786078-2001493331-509505733-1001.xml:  http://192.168.2.15:8080
+
+
+Testing connectivity to 'https://online.wonderware.com' via proxy 'http://192.168.2.15:8080'
+The proxy is on the local network for '192.168.1.55' using interface #7
+Successfully reached proxy at '192.168.2.15' on port '8080'
+Successfully connected to 'https://online.wonderware.com' via proxy
+The certifcate for 'https://online.wonderware.com' appears to be valid
+DMZ Secure Link correctly blocked access to 'http://www.apple.com'
+Successfully retrieved list of key URLs used by Insight from 'https://online.wonderware.com'
+Successfully reached 'online.wonderware.com' via proxy
+Successfully reached 'online.wonderware.eu' via proxy
+Successfully reached 'online.wonderware.net.au' via proxy
+Successfully reached 'signin.connect.aveva.com' via proxy
+Successfully reached 'identity.connect.aveva.com' via proxy
+Successfully reached 'nch.online.wonderware.com' via proxy
+Successfully reached 'nch.online.wonderware.eu' via proxy
+Successfully reached 'nch-au.online.wonderware.com' via proxy
+Successfully reached 'www.google.com' via proxy
+Successfully reached 'fonts.googleapis.com' via proxy
+Successfully reached 'fonts.gstatic.com' via proxy
+Successfully reached 'stats.g.doubleclick.net' via proxy
+Successfully reached 'cdn.connect.aveva.com' via proxy
+Successfully reached 'www.google-analytics.com' via proxy
+ 
+Tests completed at 2020-02-24 09:43:41 -08:00
