@@ -22,7 +22,7 @@ A full diagnostics script to use to report on most network and Publisher-related
 1. Where feasible, includes interpretation of the cause and offers recommendations
 1. Is a succinct way to describe communication problems when working with Technical Support and IT
 
-Example output from running this script on the Publisher node and on the DMZ Secure Link node are also included.
+Example output from running this script on the Publisher node and on the DMZ Secure Link node are also included. These results are based on the configuration described in the tutorial and use the same IP addresses shown there.
 
 Manual Tests
 ------------
