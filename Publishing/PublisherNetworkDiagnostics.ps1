@@ -303,7 +303,7 @@ Function Report-ProxyFromReplicationServers( ) {
         $Servers = New-Object System.Data.DataTable
     
         $Connection = New-Object System.Data.SQLClient.SQLConnection
-        $Connection.ConnectionString = "server='localhost';database='Runtime';trusted_connection=true;"
+        $Connection.ConnectionString = "server='localhost';database='Runtime';trusted_connection=true;connection timeout=2"
         $Connection.Open()
         $Command = New-Object System.Data.SQLClient.SQLCommand
         $Command.Connection = $Connection
