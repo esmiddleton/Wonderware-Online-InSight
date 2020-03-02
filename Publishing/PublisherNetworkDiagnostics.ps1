@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 24-Feb-2020
+# Modified: 2-Mar-2020
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -240,9 +240,41 @@ Function Get-ProxyFromConnectionFile( $path ) {
     return Get-ProxyFromConnectionString (Get-DetailsFromConnectionFile $path )
 }
 
+Function Get-XML( $path ) {
+    try {
+        [xml]$contents = Get-Content $path -ErrorAction Stop -Encoding Unicode
+        return $contents
+    } catch {
+        if ($_.Exception.HResult -ne -2146233087) {
+            Write-Verbose "Error reading connection file as Unicode '$($path)': $($_.Exception.Message)"
+            return $null
+        }
+    }
+
+    try {
+        [xml]$contents = Get-Content $path -ErrorAction Stop -Encoding UTF8
+        return $contents
+    } catch {
+        if ($_.Exception.HResult -ne -2146233087) {
+            Write-Verbose "Error reading connection file as UTF-8 '$($path)': $($_.Exception.Message)"
+            return $null
+        }
+    }
+
+    try {
+        [xml]$contents = Get-Content $path -ErrorAction Stop -Encoding ASCII
+        return $contents
+    } catch {
+        if ($_.Exception.HResult -ne -2146233087) {
+            Write-Verbose "Error reading connection file as ASCII '$($path)': $($_.Exception.Message)"
+            return $null
+        }
+    }
+}
+
 Function Get-DetailsFromConnectionFile( $path ) {
     try {
-        [xml]$config = Get-Content $path -ErrorAction Stop
+        [xml]$config = Get-XML( $path )
         $connectionString = $config.idasConfiguration.details
         return $connectionString
     } catch {
