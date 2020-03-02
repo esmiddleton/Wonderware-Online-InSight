@@ -232,7 +232,7 @@ Function Get-ProxyFromConnectionString( $connectionstring ) {
         } else {
             Write-Verbose "Error parsing connection string '$($connectionstring)...': $($_.Exception.Message)"
         }
-        return $null
+        return ""
     }
 }
 
@@ -284,7 +284,7 @@ Function Get-DetailsFromConnectionFile( $path ) {
 }
 
 Function Report-ProxyList( $Heading, $List ) {
-    if ($List.Count -gt 0) {
+    if ($List.Count -gt 0 -or $List.Rows.Count -gt 0) {
         Write-Host -NoNewline "$($Heading) proxies:"
         $List | ForEach-Object {
             Add-Member -InputObject $_ -Name "Label" -Value ("   $($_.Name): " ) -MemberType NoteProperty
@@ -311,8 +311,6 @@ Function Report-ProxyFromReplicationServers( ) {
         $Reader = $Command.ExecuteReader()
         $Servers.Load($Reader)
         $Connection.Close()
-        $Reader.Close()
-        $Command.Dispose()
     } catch {
         Write-Verbose "Error connecting to local Historian to get Replication Servers: $($_.Exception.Message)"
         return ""
