@@ -300,7 +300,19 @@ Function Report-ProxyList( $Heading, $List ) {
 
 Function Report-ProxyFromReplicationServers( ) {
     try {
-        $Servers = Invoke-Sqlcmd -Database "Runtime" -ConnectionTimeout 2 -QueryTimeout 2 -ErrorAction stop -OutputSqlErrors $false -Query "select Name=ReplicationServerName, Details=ConnectionDetails from ReplicationServer where ConnectionDetails is not null"
+        $Servers = New-Object System.Data.DataTable
+    
+        $Connection = New-Object System.Data.SQLClient.SQLConnection
+        $Connection.ConnectionString = "server='localhost';database='Runtime';trusted_connection=true;"
+        $Connection.Open()
+        $Command = New-Object System.Data.SQLClient.SQLCommand
+        $Command.Connection = $Connection
+        $Command.CommandText = "select Name=ReplicationServerName, Details=ConnectionDetails from ReplicationServer where ConnectionDetails is not null"
+        $Reader = $Command.ExecuteReader()
+        $Servers.Load($Reader)
+        $Connection.Close()
+        $Reader.Close()
+        $Command.Dispose()
     } catch {
         Write-Verbose "Error connecting to local Historian to get Replication Servers: $($_.Exception.Message)"
         return ""
