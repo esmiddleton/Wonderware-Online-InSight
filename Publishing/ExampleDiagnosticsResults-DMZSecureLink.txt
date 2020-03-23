@@ -29,8 +29,6 @@ Successfully reached proxy at '10.1.1.10' on port '8888'
 Successfully connected to 'https://online.wonderware.com' via proxy
 The certifcate for 'https://online.wonderware.com' appears to be valid
 DMZ Secure Link correctly blocked access to 'http://www.apple.com'
-Access to 'http://www.apple.com' was NOT blocked
-   If the proxy specified is DMZ Secure Link, that should be blocked. Other proxies might permit access.
 Successfully retrieved list of key URLs used by Insight from 'https://online.wonderware.com'
 Successfully reached 'online.wonderware.com' via proxy
 Successfully reached 'online.wonderware.eu' via proxy
