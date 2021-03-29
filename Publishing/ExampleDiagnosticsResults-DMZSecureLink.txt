@@ -21,7 +21,7 @@ Historian: Not found
 Publisher: Not found
 DMZ Secure Link: 2019.1128.513.1 28-Nov-2019
  
-Testing connectivity to 'https://online.wonderware.com' via proxy 'http://192.168.90.65:8888'
+Testing connectivity to 'https://online.wonderware.com' via proxy 'http://10.1.1.10:8888'
 Route to proxy at '10.1.1.10' is on '192.168.2.15' via gateway of '192.168.2.11' using interface #5
 Successfully reached gateway at '192.168.2.11' via 'ping'
 Successfully resolved hostname 'online.wonderware.com' to '104.40.63.98'
