@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 2-Mar-2020
+# Modified: 19-Apr-2021
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -636,7 +636,8 @@ Write-Host (GetFileVersion "DMZ Secure Link" (ValueFromRegistry ("HKLM:\SOFTWARE
 
 Write-Host " "
 Report-ProxyFromConfigFile "Replication (64-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "x64\aahReplication.exe.config")
-Report-ProxyFromConfigFile "Replication (32-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "aahReplication.exe.config")
+Report-ProxyFromConfigFile "Replication (32-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "aahReplication.exe.config") # Historian 2017+
+Report-ProxyFromConfigFile "Replication (2014 R2 SP1)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "aahReplicationSvc.exe.config") # Historian 2014 R2 SP1
 Report-ProxyFromConfigFile "Publisher" ((ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\HistorianPublisher\Setup") "LaunchTarget") + "\aahIDAS.exe.config")
 Report-ProxyFromReplicationServers
 Report-ProxyFromConnectionFiles
