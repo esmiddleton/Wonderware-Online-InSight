@@ -5,11 +5,11 @@ Typical control network architectures create a lot of obstacles for publishing d
 
 DMZ
 ---
-Although these tools can be useful in other architectures, they assume the Publisher is deployed behind a DMZ which protects against general Internet access and that a web proxy, such as AVEVA's [DMZ Secure Link](https://online.wonderware.com/Downloads/InsightPublisher/DMZSecureLink.zip "free DMZ Secure Link download"), is installed on a Windows system within the DMZ. 
+Although these tools can be useful in other architectures, they assume the Publisher is deployed behind a DMZ which protects against general Internet access and that a web proxy, such as AVEVA's [DMZ Secure Link](https://insight.connect.aveva.com/Downloads/InsightPublisher/DMZSecureLink.zip "free DMZ Secure Link download"), is installed on a Windows system within the DMZ. 
 
 Tutorial
 --------
-There is also a [brief video tutorial](https://1drv.ms/v/s!AqHkJ_gHT62Qgb4C-z5HrEpHya8zxQ?e=j7AnHM "Watch") describing the architecture and network configuration
+There is also a [brief video tutorial](https://www.aveva.com/en/perspectives/blog/insight-dmz-securelink "Watch") describing the architecture and network configuration
 
 Publisher Network Diagnostics
 -----------------------------
