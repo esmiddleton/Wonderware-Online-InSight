@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 19-Apr-2021
+# Modified: 18-Nov-2021
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -143,18 +143,25 @@ Function Get-StatusText ( $status ) {
 
 Function Get-UserProxy
  { # from http://obilan.be 
-    $proxy = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').proxyServer
-    if ($proxy)
+    $enabled = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyEnable
+    if ($enabled)
     {
-        if ($proxy -ilike "*=*")
+        $proxy = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').proxyServer
+        if ($proxy)
         {
-            $proxy = $proxy -replace "=","://" -split(';') | Select-Object -First 1
+            if ($proxy -ilike "*=*")
+            {
+                $proxy = $proxy -replace "=","://" -split(';') | Select-Object -First 1
+            }
+            else
+            {
+                $proxy = "http://" + $proxy
+            }
         }
-        else
-        {
-            $proxy = "http://" + $proxy
-        }
-    }    
+    } else {
+        $proxy = ""
+    }
+
     return $proxy
 }
 
@@ -349,7 +356,7 @@ Function Report-Ping($label, $hostname)
         Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' via 'ping'"
     } else {
         Write-Host -ForegroundColor Red "Failed 'ping' to $($label) at '$($hostname)'"
-        Write-Host -ForegroundColor Cyan "   This could mean that ICMP is disabled, the system is offline or that TCP route/gateway is not correctly configured"
+        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This could mean that ICMP is disabled, the system is offline or that TCP route/gateway is not correctly configured"
     }
 }
 
@@ -363,7 +370,7 @@ Function Report-Port($label, $hostname, $port)
         Write-Host -ForegroundColor Red "Failed to reach $($label) on port '$($port)' at '$($hostname)'"
         if (Check-Ping $hostname) {
             Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' using 'ping'"
-            Write-Host -ForegroundColor Cyan "   This means the TCP route is working, but the port is blocked by a hardware or software firewall or the service is not running"
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This means the TCP route is working, but the port is blocked by a hardware or software firewall or the service is not running"
         } else {
             $route = Check-Route $hostname
             if ($route) {
@@ -371,7 +378,7 @@ Function Report-Port($label, $hostname, $port)
             } else {
                 Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)'"
             }
-            Write-Host -ForegroundColor Cyan "   This may mean the TCP route/gateway is not correctly configured"
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the TCP route/gateway is not correctly configured"
             $route = $null
         }
     }
@@ -411,7 +418,7 @@ Function Report-Uri($Uri, $ProxyUri, $Required)
         } else {
             Write-Host -ForegroundColor Red "Failed to reach optional host '$($hostname)' via proxy"
         }
-        Write-Host -ForegroundColor Cyan "   This may mean the proxy is not correctly configured"
+        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the proxy is not correctly configured"
         Report-Hostname ([System.Uri]$Uri).Host $false
     }
 #    Report-Hostname $Uri $false
@@ -432,7 +439,7 @@ Function Report-Hostname( $hostname, $Required )
                     Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' as basic address '$($ip -Join "', '")'"
                 } else {
                     if ($Required) {
-                        Write-Host -ForegroundColor Cyan "   Potential problem resolving '$($hostname)' as '$($ip)'"
+                        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Potential problem resolving '$($hostname)' as '$($ip)'"
                     }
                 }
             }
@@ -532,12 +539,12 @@ if ( (ValueFromRegistry "HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NetFramework\v4.0
     } else {
         $Crypto += "No (default to TLS 1.0)"
         Write-Host $Crypto
-        Write-Host -ForegroundColor Cyan "   Publisher versions released before Dec-2018 will not be able to connect to Insight"
+        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Publisher versions released before Dec-2018 will not be able to connect to Insight"
     }
 }
 if ($PSVersionTable.CLRVersion.Major -lt 4) {
-    Write-Host -ForegroundColor Cyan "   This version of Powershell cannot use the required TLS versions and will not be able to connect to Insight"
-    Write-Host -ForegroundColor Cyan "   Other software on this system MAY support it, but this script will fail"
+    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This version of Powershell cannot use the required TLS versions and will not be able to connect to Insight"
+    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Other software on this system MAY support it, but this script will fail"
 }
 
 # Display various proxy settings to let the user check for consistency
@@ -547,7 +554,7 @@ Write-Host "The user's 'Internet Options' proxy is '$($UserProxy)'"
 $SystemProxy = Get-SystemProxy
 Write-Host "The system WinHTTP proxy is '$($SystemProxy)'"
 if ($SystemProxy -ne $ProxyUri -or $UserProxy -ne $ProxyUri -or $SystemProxy -ne $UserProxy) {
-    Write-Host -ForegroundColor Cyan "   The user & system proxies should usually be consistent with '$($ProxyUri)'"
+    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The user & system proxies should usually be consistent with '$($ProxyUri)'"
 }
 
 # Try to read local DMZ Secure Link configuration
@@ -683,7 +690,7 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
             if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::TrustFailure) {
                 # We ignore trust failures, since we only want the certificate, and the service point is still populated at this point
                 Write-Host -ForegroundColor Red "The certifcate for '$($InsightUri)' is not trusted"
-                Write-Host -ForegroundColor Cyan "   This may be beause of an upstream proxy or other security layer that is intercepting requests"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of an upstream proxy or other security layer that is intercepting requests"
             }
             else
             {
@@ -696,13 +703,13 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
         if (($CertRequest.ServicePoint.Certificate) -and ($CertRequest.ServicePoint.Certificate.Handle -ne 0)) {
             if ($CertRequest.ServicePoint.Certificate.Subject -inotlike"*O=AVEVA*") {
                 Write-Host -ForegroundColor Red "The '$($InsightUri)' appears to be impersonated by another issuer: $($CertRequest.ServicePoint.Certificate.Issuer)"
-                Write-Host -ForegroundColor Cyan "   It may be getting replaced by an upstream proxy or other security layer"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   It may be getting replaced by an upstream proxy or other security layer"
             } else {
                 Write-Host -ForegroundColor Green "The certifcate for '$($InsightUri)' appears to be valid"
             }
         } else {
             Write-Host -ForegroundColor Red "Unable to get certificate for '$($InsightUri)'"
-            Write-Host -ForegroundColor Cyan "   This may mean requests are being intercepted by an upstream proxy or other security layer."
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean requests are being intercepted by an upstream proxy or other security layer."
         }
         [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
         
@@ -712,7 +719,7 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
             Write-Host -ForegroundColor Green "DMZ Secure Link correctly blocked access to '$($CheckBlockedUri)'"
         } else {
             Write-Host -ForegroundColor Red "Access to '$($CheckBlockedUri)' was NOT blocked"
-            Write-Host -ForegroundColor Cyan "   If the proxy specified is DMZ Secure Link, that should be blocked. Other proxies might permit access."
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   If the proxy specified is DMZ Secure Link, that should be blocked. Other proxies might permit access."
         }
 
         $list = Check-Http($InsightUri + "/apis/wwocorefunctions/api/OnlineConfigPush?config=publisher") $ProxyUri $true
@@ -721,16 +728,16 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
              $list.URLs | ForEach-Object -Process { $HttpResult = Report-Uri $_.URL $ProxyUri $_.AccessMandatory }
         } else {
              Write-Host -ForegroundColor Red "Unable to retrieve list of needed sites from Insight"
-             Write-Host -ForegroundColor Cyan "   This may mean the proxy is not correctly configured"
+             Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the proxy is not correctly configured"
         }
 
     } else {
         if ($HttpResult -eq -1) {
             Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
             if (!$TlsOkay) {
-                Write-Host -ForegroundColor Cyan "   This failure was likely because TLS 1.2 was not available to Powershell"
-                Write-Host -ForegroundColor Cyan "   If your Publisher was released before Dec-2018, you need to force strong cryptography"
-                Write-Host -ForegroundColor Cyan "   You can use the Powershell script below, run as an 'Administrator':"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This failure was likely because TLS 1.2 was not available to Powershell"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   If your Publisher was released before Dec-2018, you need to force strong cryptography"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   You can use the Powershell script below, run as an 'Administrator':"
 
                 Write-Host -ForegroundColor Gray "    `$tls = [Net.ServicePointManager]::SecurityProtocol"
                 Write-Host -ForegroundColor Gray "    Write ""Current TLS Settings: `${tls}""" 
@@ -748,16 +755,16 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
                 Write-Host -ForegroundColor Green "Successfully connected to '$($InsecureInsightUri)' (insecure) via proxy"
             } else {
                 Write-Host -ForegroundColor Red "Failed insecure HTTP connection to '$($InsecureInsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($InsecureResult)))"
-                Write-Host -ForegroundColor Cyan "   This may be a problem with the upstream proxy or Internet connectivity"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be a problem with the upstream proxy or Internet connectivity"
             }
     } else {
         Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
-        Write-Host -ForegroundColor Cyan "   The outbound connections from the proxy may be blocked or there may be security protocol problems"
+        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The outbound connections from the proxy may be blocked or there may be security protocol problems"
         } 
     }
 } else {
     Write-Host -ForegroundColor Red "Failed to open TCP connection to proxy at '$($ProxyUri)'"
-    Write-Host -ForegroundColor Cyan "   The port on the proxy may be blocked by a hardware or software firewall or it may be listening on a different IP address"
+    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The port on the proxy may be blocked by a hardware or software firewall or it may be listening on a different IP address"
 
     # Try to 'ping' proxy (won't always work, even when connections work)
     Report-Ping "proxy" $ProxyIP
