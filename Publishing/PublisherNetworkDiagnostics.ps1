@@ -191,10 +191,10 @@ Function Get-SystemProxy {
                 if ($proxylength -gt 0) {            
                     $result = "http://" + -join ($Conprx[(12+3+1)..(12+3+1+$proxylength-1)] | ForEach-Object {([char]$_)})            
                 } else {                                
-                    $result = $null
+                    $result = ''
                 }
             } else {
-                    $result = $null
+                    $result = ''
             }
        }
        return $result                  
