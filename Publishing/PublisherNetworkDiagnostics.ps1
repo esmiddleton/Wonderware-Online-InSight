@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 18-Nov-2021
+# Modified: 21-Jul-2022
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -595,7 +595,10 @@ try {
             Gateway = $gw.NextHop
             Destination = $gw.DestinationPrefix
             Network = $_.NetProfile.NetworkCategory
-            Status = $_.NetProfile.IPv4Connectivity
+            Connect = $_.NetProfile.IPv4Connectivity
+            Status = $_.NetAdapter.Status
+            Media = $_.NetAdapter.MediaConnectionState
+            Speed = $_.NetAdapter.LinkSpeed
             Type = "IPv4"
             Count = $_.IPv4Address.Count
         }
@@ -618,7 +621,10 @@ try {
             Gateway = $gw.NextHop
             Destination = $gw.DestinationPrefix
             Network = $_.NetProfile.NetworkCategory
-            Status = $_.NetProfile.IPv6Connectivity
+            Connect = $_.NetProfile.IPv6Connectivity
+            Status = $_.NetAdapter.Status
+            Media = $_.NetAdapter.MediaConnectionState
+            Speed = $_.NetAdapter.LinkSpeed
             Type = "IPv6"
             Count = $_.IPv6Address.Count
         }
