@@ -1,8 +1,3 @@
-# https://dev-rp-z5wwplvmpt7tu.azurewebsites.net/apis/wwocorefunctions/api/OnlineConfigPush?config=dmzv2
-# $allowListUrl = 'https://dev.insight.capdev-connect.aveva.com/apis/wwocorefunctions/api/OnlineConfigPush?config=dmzv2-internal'
-# Ctrl-O (options) for internal 
-#$allowListUrl = 'https://dev.insight.capdev-connect.aveva.com/apis/wwocorefunctions/api/OnlineConfigPush?config=dmzv2'
-
 # Dump the "Allow List" used by DMZ Secure Link
 #
 # ---------------------------------------------------
