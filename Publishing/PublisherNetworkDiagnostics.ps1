@@ -10,11 +10,11 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 21-Jul-2022
+# Modified: 3-Apr-2024
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
-#    Set-ExecutionPolicy unrestricted
+#    Set-ExecutionPolicy unrestricte
 #
 # To disable Powershell scripts use (after using the script):
 #    Set-ExecutionPolicy restricted
@@ -30,7 +30,8 @@ $ProxyIP = ""
 $ProxyPort = ""
 
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
-$InsightHost = "online.wonderware.com"
+#$InsightHost = "online.wonderware.com"
+$InsightHost = "insight.connect.aveva.com"
 $CheckBlockedUri = "http://www.apple.com"
 
 $VerbosePreference = "SilentlyContinue" # Don't include more detailed tracing
@@ -171,7 +172,8 @@ Function Get-IpAddress ($HostOrIP) {
         $ip = $HostOrIP
     } else {
         try {
-            $ip = ([System.Net.Dns]::GetHostEntry($HostOrIP).AddressList | Select-Object -First 1).IPAddressToString
+            $ip = ([System.Net.Dns]::GetHostEntry($HostOrIP).AddressList | Where-Object AddressFamily -eq "InterNetwork" | Select-Object -First 1).IPAddressToString
+            Write-Verbose "Also found IPv6 address $([System.Net.Dns]::GetHostEntry($HostOrIP).AddressList | Where-Object AddressFamily -eq "InterNetworkV6" | Select-Object -First 1).IPAddressToString)"
         } catch {
             $ip = ""
         }
@@ -305,24 +307,66 @@ Function Report-ProxyList( $Heading, $List ) {
     $List | Format-Table -HideTableHeaders Label,Proxy     
 }
 
-Function Report-ProxyFromReplicationServers( ) {
-    try {
-        $Servers = New-Object System.Data.DataTable
-    
-        $Connection = New-Object System.Data.SQLClient.SQLConnection
-        $Connection.ConnectionString = "server='localhost';database='Runtime';trusted_connection=true;connection timeout=2"
-        $Connection.Open()
-        $Command = New-Object System.Data.SQLClient.SQLCommand
-        $Command.Connection = $Connection
-        $Command.CommandText = "select Name=ReplicationServerName, Details=ConnectionDetails from ReplicationServer where ConnectionDetails is not null"
-        $Reader = $Command.ExecuteReader()
-        $Servers.Load($Reader)
-        $Connection.Close()
-    } catch {
-        Write-Verbose "Error connecting to local Historian to get Replication Servers: $($_.Exception.Message)"
-        return ""
+   
+$SQLConnection = New-Object System.Data.SQLClient.SQLConnection
+$SQLConnection.ConnectionString = "server='localhost';database='Runtime';trusted_connection=true;connection timeout=2"
+$SQLFailed = $false
+Function CloseSQL {
+    if ($SQLConnection.State -eq [System.Data.ConnectionState]::Closed) {
+        $SQLConnection.Close()
     }
-    Report-ProxyList "Replication Servers" $Servers
+}
+
+Function QuerySQL( $QueryText, $Label ) {
+    if (! $SQLFailed ) {
+        try {
+            if ($SQLConnection.State -eq [System.Data.ConnectionState]::Closed) {
+                $SQLConnection.Open()
+            }
+
+            $Command = New-Object System.Data.SQLClient.SQLCommand
+            $Command.Connection = $SQLConnection
+            $Command.CommandText = $QueryText
+            $Reader = $Command.ExecuteReader()
+            $Result = New-Object System.Data.DataTable
+            $Result.Load($Reader)
+            return $Result
+        } catch {
+            $SQLFailed = $true
+            Write-Verbose "Error connecting to local Historian $($Label): $($_.Exception.Message)"
+            return ""
+        }
+    }
+}
+
+
+Function CheckConnectionDetailsSize( ) {
+    $Result = QuerySQL "SELECT Size=CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReplicationServer' AND COLUMN_NAME = 'ConnectionDetails'" "to check connection length"
+    if ($Result -ne "") {
+        if ($Result.Size -lt 4000) {
+            Write-Host -ForegroundColor Red "Database schema was not correctly migrated--'ConnectionDetails' is too small ($($Result.Size))"
+        } else {
+            Write-Verbose "Database column 'ConnectionDetails' is ($($Result.Size))"
+        }
+    }
+}
+
+Function CheckSyncQueueSize( ) {
+    $Result = QuerySQL "select Entries=count(*) from ReplicationSyncRequestInfo q join ReplicationServer s on s.ReplicationServerKey = q.ReplicationServerKey where s.ConnectionDetails is not null" "to check sync queue size"
+    if ($Result -ne "") {
+        if ($Result.Entries -ge 5000) {
+            Write-Host -ForegroundColor Red "The current size of the replication sync queue is very high ($($Result.Entries)) and likely needs to be cleaned out with 'CleanupSyncQueue.sql', available from Tech Support"
+        } else {
+            Write-Verbose "Replicaton sync queue size is ($($Result.Entries))"
+        }
+    }
+}
+
+Function Report-ProxyFromReplicationServers( ) {
+    $Servers = QuerySQL "select Name=ReplicationServerName, Details=ConnectionDetails from ReplicationServer where ConnectionDetails is not null" "to get Replication Servers"
+    if ($Servers -ne "") {
+        Report-ProxyList "Replication Servers" $Servers
+    }
 }
 
 Function Report-ProxyFromConnectionFiles( ) {
@@ -351,13 +395,18 @@ Function Report-ProxyFromConfigFile( $label, $path ) {
 
 Function Report-Ping($label, $hostname) 
 {
-    $Response = Check-Ping $hostname
-    if ($Response) {
-        Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' via 'ping'"
+    if ((![String]::IsNullOrEmpty($hostname)) -and ($hostname -ne "::")) {
+        $Response = Check-Ping $hostname
+        if ($Response) {
+            Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' via 'ping'"
+        } else {
+            Write-Host -ForegroundColor Red "Failed 'ping' to $($label) at '$($hostname)'"
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This could mean that ICMP is disabled, the system is offline or that TCP route/gateway is not correctly configured"
+        }
     } else {
-        Write-Host -ForegroundColor Red "Failed 'ping' to $($label) at '$($hostname)'"
-        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This could mean that ICMP is disabled, the system is offline or that TCP route/gateway is not correctly configured"
+        Write-Verbose "The hostname for $($label) was not valid: '$($hostname)'"
     }
+
 }
 
 Function Report-Port($label, $hostname, $port) 
@@ -427,25 +476,33 @@ Function Report-Uri($Uri, $ProxyUri, $Required)
 
 Function Report-Hostname( $hostname, $Required )
 {
-    if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
-        Write-Verbose "'$($hostname)' is recognized as an IP address"
+    if ([String]::IsNullOrEmpty($hostname)) {
+        if ($Required) {
+            Write-Host -ForegroundColor Red "Required hostname is blank"
+        } else {
+            Write-Verbose "Hostname is blank"
+        }
     } else {
-        try {
-            $ip = ([System.Net.Dns]::GetHostEntry($hostname)).AddressList | Select-Object -ExpandProperty "IPAddressToString"
-            if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Dns ) {
-                Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' to '$($ip -Join "', '")'"
-            } else {
-                if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Basic) {
-                    Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' as basic address '$($ip -Join "', '")'"
+        if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
+            Write-Verbose "'$($hostname)' is recognized as an IP address"
+        } else {
+            try {
+                $ip = ([System.Net.Dns]::GetHostEntry($hostname)).AddressList | Select-Object -ExpandProperty "IPAddressToString"
+                if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Dns ) {
+                    Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' to '$($ip -Join "', '")'"
                 } else {
-                    if ($Required) {
-                        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Potential problem resolving '$($hostname)' as '$($ip)'"
+                    if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::Basic) {
+                        Write-Host -ForegroundColor Green "Successfully resolved hostname '$($hostname)' as basic address '$($ip -Join "', '")'"
+                    } else {
+                        if ($Required) {
+                            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Potential problem resolving '$($hostname)' as '$($ip)'"
+                        }
                     }
                 }
-            }
-        } catch {
-            if ($Required) {
-                Write-Host -ForegroundColor Red "Failed to resolve hostname '$($hostname)'"
+            } catch {
+                if ($Required) {
+                    Write-Host -ForegroundColor Red "Failed to resolve hostname '$($hostname)'"
+                }
             }
         }
     }
@@ -471,10 +528,33 @@ Function GetFileVersion( $Label, $Path ) {
     if ( (![String]::IsNullOrEmpty($Path)) -and (Test-Path $Path -PathType leaf)) {
         $info = $Label + ": "
         $info += [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path).FileVersion
-        $info += " " + (Get-ItemProperty $Path).LastWriteTime.Date.ToString("dd-MMM-yyyy")
+        $info += " " + (Get-ItemProperty $Path).LastWriteTime.Date.ToString("(dd-MMM-yyyy)")
     }
     return $info
 }
+
+Function CheckForHotfix( $Label, $Path, $ProductVersion, $FileVersion, $Hotfix ) {
+    if ( (![String]::IsNullOrEmpty($Path)) -and (Test-Path $Path -PathType leaf)) {
+        
+        $FileInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
+        if ( ($FileInfo.ProductVersion -eq $ProductVersion) -and ($FileInfo.FileVersion -lt $FileVersion) ) {
+            $info = $Label + " " + $ProductVersion + " requires '" + $FileInfo.OriginalFilename + "'"
+            $info +=" to be " + $FileVersion + " but you have "
+            $info += $FileInfo.FileVersion
+            $info += " " + (Get-ItemProperty $Path).LastWriteTime.Date.ToString("(dd-MMM-yyyy)")
+            Write-Host -ForegroundColor Red $Info
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not apply hotfix $($Hotfix)"
+        } else {
+            if ( $FileInfo.ProductVersion.Substring(0,4) -eq $ProductVersion.Substring(0,4) ) {
+                $info = $Label + " " + $FileInfo.ProductVersion + " requires an upgrade to " + $ProductVersion + " and then requires hotfix $($Hotfix)"
+                Write-Host -ForegroundColor Red $Info
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not upgrade"
+            }
+        }
+    }
+}
+
+
 
 # Script utility variables
 $InsightUri = "https://" + $InsightHost
@@ -651,9 +731,23 @@ Write-Host " "
 Report-ProxyFromConfigFile "Replication (64-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "x64\aahReplication.exe.config")
 Report-ProxyFromConfigFile "Replication (32-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "aahReplication.exe.config") # Historian 2017+
 Report-ProxyFromConfigFile "Replication (2014 R2 SP1)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "aahReplicationSvc.exe.config") # Historian 2014 R2 SP1
-Report-ProxyFromConfigFile "Publisher" ((ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\HistorianPublisher\Setup") "LaunchTarget") + "\aahIDAS.exe.config")
+#Report-ProxyFromConfigFile "Publisher" ((Split-Path (ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\HistorianPublisher\Setup") "LaunchTarget")) + "\aahIDAS.exe.config")
 Report-ProxyFromReplicationServers
 Report-ProxyFromConnectionFiles
+
+# Check for database problems
+CheckConnectionDetailsSize
+CheckSyncQueueSize
+CloseSQL
+Write-Host " "
+
+# Check for hotfixes
+$ReplicationPath = ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "x64\aahReplication.exe")
+CheckForHotfix "Historian" $ReplicationPath "17.2.000" "2017.508.7132.1" "1064329"
+CheckForHotfix "Historian" $ReplicationPath "17.3.101" "2019.530.3636.2" "1109636"
+CheckForHotfix "Historian" $ReplicationPath "20.0.000" "2021.731.3133.2" "1109704"
+CheckForHotfix "Historian" $ReplicationPath "20.1.100" "2021.731.3133.5" "1208899"
+Write-Host " "
 
 Write-Host  "Testing connectivity to '$($InsightUri)' via proxy '$($ProxyUri)'"
 
