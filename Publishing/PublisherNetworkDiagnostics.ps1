@@ -49,7 +49,11 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # ==============================================================
 
 Function Check-Ping ($HostOrIP) {
-    $result = Test-Connection -ComputerName $HostOrIP -Count 1 -Quiet
+    try {
+        $result = Test-Connection -ComputerName $HostOrIP -Count 1 -ErrorAction Stop
+    } catch {
+        Write-Verbose "Unable to ping '$HostOrIP'"
+    }
     return $result
 }
 
@@ -70,8 +74,14 @@ Function Check-Port($HostOrIP, $Port) {
 
 Function Check-Route( $HostOrIP ) {
     try {
-        $result = Find-NetRoute -RemoteIPAddress (Get-IpAddress $HostOrIP)
+        $ip = Get-IpAddress $HostOrIP
+        $result = Find-NetRoute -RemoteIPAddress $ip -ErrorAction Stop
     } catch {
+        $destination = "'$HostOrIP'"
+        if ( $HostOrIP -ne $ip ) {
+            $destination += " (" + $ip +")"
+        }
+        Write-Host -ForegroundColor Red "No network route to $destination was found"
         $result = $null
     }
     return $result
@@ -638,22 +648,30 @@ Function GetFileVersion( $Label, $Path ) {
     return $info
 }
 
-Function CheckForHotfix( $Label, $Path, $ProductVersion, $FileVersion, $Hotfix ) {
+Function CheckForHotfix( $Label, $Path, $ProductVersion, $FileVersion, $Hotfix, $isMinVer ) {
     if ( (![String]::IsNullOrEmpty($Path)) -and (Test-Path $Path -PathType leaf)) {
         
         $FileInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
-        if ( ($FileInfo.ProductVersion -eq $ProductVersion) -and ($FileInfo.FileVersion -lt $FileVersion) ) {
-            $info = $Label + " " + $ProductVersion + " requires '" + $FileInfo.OriginalFilename + "'"
-            $info +=" to be " + $FileVersion + " but you have "
-            $info += $FileInfo.FileVersion
+        if (($isMinVer) -and ($FileInfo.ProductVersion.Substring(0,4) -lt $ProductVersion.Substring(0,4)) ) {
+            $info = $Label + " requires a minimum version of " + $ProductVersion.Substring(0,4) + " but you have "
+            $info += $FileInfo.ProductVersion.Substring(0,4)
             $info += " " + (Get-ItemProperty $Path).LastWriteTime.Date.ToString("(dd-MMM-yyyy)")
             Write-Host -ForegroundColor Red $Info
-            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not apply hotfix $($Hotfix)"
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not upgrade to $($ProductVersion.Substring(0,4)) or later"
         } else {
-            if ( $FileInfo.ProductVersion.Substring(0,4) -eq $ProductVersion.Substring(0,4) ) {
-                $info = $Label + " " + $FileInfo.ProductVersion + " requires an upgrade to " + $ProductVersion + " and then requires hotfix $($Hotfix)"
+            if ( ($FileInfo.ProductVersion -eq $ProductVersion) -and ($FileInfo.FileVersion -lt $FileVersion) ) {
+                $info = $Label + " " + $ProductVersion + " requires '" + $FileInfo.OriginalFilename + "'"
+                $info +=" to be " + $FileVersion + " but you have "
+                $info += $FileInfo.FileVersion
+                $info += " " + (Get-ItemProperty $Path).LastWriteTime.Date.ToString("(dd-MMM-yyyy)")
                 Write-Host -ForegroundColor Red $Info
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not upgrade"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not apply hotfix $($Hotfix)"
+            } else {
+                if ( $FileInfo.ProductVersion.Substring(0,4) -eq $ProductVersion.Substring(0,4) ) {
+                    $info = $Label + " " + $FileInfo.ProductVersion + " requires an upgrade to " + $ProductVersion + " and then requires hotfix $($Hotfix)"
+                    Write-Host -ForegroundColor Red $Info
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not upgrade"
+                }
             }
         }
     }
@@ -737,19 +755,6 @@ Function Report-DMZConfig( $fileName ) {
 }
 
 
-# Script utility variables
-$InsightUri = "https://" + $InsightHost
-$InsecureInsightUri = "http://" + $InsightHost
-$ProxyUri = ""
-if ($ProxyIP -ne "" -and $ProxyPort -ne "") {
-    $ProxyUri = "http://" + $ProxyIP + ":" + $ProxyPort
-} else {
-    $ProxyUri = Get-UserProxy
-    $ProxyParts = $ProxyUri -replace "http://","" -split(':')
-    $ProxyIP = Get-IpAddress( $ProxyParts[0] )
-    $ProxyPort = $ProxyParts[1]
-}
-
 Write-Host ""
 Write-Host "$(Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")"
 $Environment = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion")
@@ -808,12 +813,32 @@ if ($PSVersionTable.CLRVersion.Major -lt 4) {
     Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Other software on this system MAY support it, but this script will fail"
 }
 
+# Script utility variables
+$InsightUri = "https://" + $InsightHost
+$InsecureInsightUri = "http://" + $InsightHost
+
 # Display various proxy settings to let the user check for consistency
+$SystemProxy = Get-SystemProxy
 $UserProxy = Get-UserProxy
 Write-Host "The user's 'Internet Options' proxy is '$($UserProxy)'"
-
-$SystemProxy = Get-SystemProxy
 Write-Host "The system WinHTTP proxy is '$($SystemProxy)'"
+
+$ProxyUri = ""
+if ($ProxyIP -ne "" -and $ProxyPort -ne "") {
+    $ProxyUri = "http://" + $ProxyIP + ":" + $ProxyPort
+} else {
+    if ($SystemProxy -ne "") {
+        $ProxyUri = $SystemProxy
+    } else {
+        if ($UserProxy -ne "") {
+            $ProxyUri = $UserProxy
+        }
+    }
+    $ProxyParts = $ProxyUri -replace "http://","" -split(':')
+    $ProxyIP = Get-IpAddress( $ProxyParts[0] )
+    $ProxyPort = $ProxyParts[1]
+}
+
 if ($SystemProxy -ne $ProxyUri -or $UserProxy -ne $ProxyUri -or $SystemProxy -ne $UserProxy) {
     Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The user & system proxies should usually be consistent with '$($ProxyUri)'"
 }
@@ -909,30 +934,30 @@ if ( ![String]::IsNullOrEmpty( (ValueFromRegistry "HKLM:\SOFTWARE\ArchestrA\Secu
 CheckConnectionDetailsSize
 CheckSyncQueueSize
 CloseSQL
-Write-Host " "
 
 # Check for hotfixes
 $ReplicationPath = ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "x64\aahReplication.exe")
-CheckForHotfix "Historian" $ReplicationPath "17.2.000" "2017.508.7132.1" "1064329"
-CheckForHotfix "Historian" $ReplicationPath "17.3.101" "2019.530.3636.2" "1109636"
-CheckForHotfix "Historian" $ReplicationPath "20.0.000" "2021.731.3133.2" "1109704"
-CheckForHotfix "Historian" $ReplicationPath "20.1.100" "2021.731.3133.5" "1208899"
+CheckForHotfix "Historian" $ReplicationPath "17.2.000" "2017.508.7132.1" "1064329" $true
+CheckForHotfix "Historian" $ReplicationPath "17.3.101" "2019.530.3636.2" "1109636" $false
+CheckForHotfix "Historian" $ReplicationPath "20.0.000" "2021.731.3133.2" "1109704" $false
+CheckForHotfix "Historian" $ReplicationPath "20.1.100" "2021.731.3133.5" "1208899" $false
 Write-Host " "
 
-Write-Host  "Testing connectivity to '$($InsightUri)' via proxy '$($ProxyUri)'"
+if ($ProxyIP -ne "") {
+    Write-Host  "Testing connectivity to '$($InsightUri)' via proxy '$($ProxyUri)'"
 
-# Check the route
-Report-Route "proxy" $ProxyIP
+    # Check the route
+    Report-Route "proxy" $ProxyIP
 
-# Confirm we can resolve the names (but only if these aren't IP address)
-Report-Hostname ([System.Uri]$ProxyUri).Host $true
-if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$UserProxy).Host ) {
-    Report-Hostname ([System.Uri]$UserProxy).Host $true
+    # Confirm we can resolve the names (but only if these aren't IP address)
+    Report-Hostname ([System.Uri]$ProxyUri).Host $false
+    if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$UserProxy).Host ) {
+        Report-Hostname ([System.Uri]$UserProxy).Host $false
+    }
+    if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$SystemProxy).Host -and ([System.Uri]$SystemProxy).Host -notlike ([System.Uri]$UserProxy).Host ) {
+        Report-Hostname ([System.Uri]$SystemProxy).Host $false
+    }
 }
-if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$SystemProxy).Host -and ([System.Uri]$SystemProxy).Host -notlike ([System.Uri]$UserProxy).Host ) {
-    Report-Hostname ([System.Uri]$SystemProxy).Host $false
-}
-Report-Hostname ([System.Uri]$InsightUri).Host $false
 
 # Use variations on the lines below, uncommented, for other test cases
 #Check-Port "rdp" "myhostname" 3389
@@ -1008,6 +1033,9 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
 
     # Try to 'ping' proxy (won't always work, even when connections work)
     Report-Ping "proxy" $ProxyIP
+
+    Report-Hostname ([System.Uri]$InsightUri).Host $true
+
 
 }
 
