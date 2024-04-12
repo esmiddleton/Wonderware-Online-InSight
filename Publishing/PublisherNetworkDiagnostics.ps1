@@ -10,11 +10,11 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 3-Apr-2024
+# Modified: 12-Apr-2024
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
-#    Set-ExecutionPolicy unrestricte
+#    Set-ExecutionPolicy unrestricted
 #
 # To disable Powershell scripts use (after using the script):
 #    Set-ExecutionPolicy restricted
@@ -30,12 +30,19 @@ $ProxyIP = ""
 $ProxyPort = ""
 
 # INSTANCE: Most tests apply generally, but if you want to specifically test your region, update the name below
-#$InsightHost = "online.wonderware.com"
 $InsightHost = "insight.connect.aveva.com"
+#$InsightHost = "online.wonderware.com"
+#$InsightHost = "online.wonderware.eu"
+#$InsightHost = "online.wonderware.net.au"
+#$InsightHost = "portal.eu-insight.connect.aveva.com"
+#$InsightHost = "portal.au-insight.connect.aveva.com"
 $CheckBlockedUri = "http://www.apple.com"
 
 $VerbosePreference = "SilentlyContinue" # Don't include more detailed tracing
 #$VerbosePreference = "Continue" # Include more detailed tracing output
+
+$allowListUrl = 'https://insight.connect.aveva.com/apis/wwocorefunctions/api/OnlineConfigPush?config=dmzv2'
+$DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 
 #
 # END OF SITE-SPECIFIC SETTINGS
@@ -508,6 +515,104 @@ Function Report-Hostname( $hostname, $Required )
     }
 }
 
+
+Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {
+        param($sender, $certificate, $chain, $sslPolicyErrors)
+
+        Write-Verbose "Checking validity of the certificate for '$Uri' issued by '$($Certificate.IssuerName.Name)'"
+        #If ($sslPolicyErrors
+
+        $problemFound = $false
+        #$chain.ChainElements | ForEach-Object {
+        ($chain.ChainElements.Count-1)..0 | ForEach-Object {
+            #$ce = $_
+            $ce = $chain.ChainElements[$_]
+            $cert = $ce.Certificate
+            Write-Verbose "`t'$($cert.Subject)' from '$($cert.IssuerName.Name)'"
+
+            if ([DateTime]::Now -gt $cert.NotAfter) {
+                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy')))"
+                $problemFound = $true
+                return $false
+            }
+
+            if ([DateTime]::Now -lt $cert.NotBefore) {
+                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' is not valid until $($cert.NotBefore.ToString('dd-MMM-yyyy'))"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy')))"
+                $problemFound = $true
+                return $false
+            }
+
+            if ($ce.ChainElementStatus.Status -eq [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::UntrustedRoot) {
+                # Self-signed certificates with an untrusted root
+                Write-Host -ForegroundColor Red "The root certificate for '$Uri' was not trusted"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause your trusted certificate authorities are out of date"
+                $problemFound = $true
+                return $false
+            }
+
+            if (($ce.ChainElementStatus.Count -gt 0) -and ($ce.ChainElementStatus.Status -ne [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NoError)) {
+                # If there are any other errors in the certificate chain,
+                # the certificate is invalid, so the method returns false.
+                Write-Host -ForegroundColor Red "There where errors in the certificate '$($cert.Subject)' in the chain for '$Uri' ($($ce.ChainElementStatus.Status))"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Don't know why"
+                $problemFound = $true
+                return $false
+            }
+        }
+
+        if ((!$problemFound) -and ($sslPolicyErrors -ne [System.Net.Security.SslPolicyErrors]::None)) {
+            Write-Host -ForegroundColor Red "The certificate for '$Uri' did not meet the policy requirements"
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of your group policy settings"
+            $problemFound = $true
+            return $false # Certificate is bad
+        }
+
+        # When processing reaches this point, the certificate is considered valid.
+        return (!$problemFound)
+    }
+
+    try {
+        $CertRequest = [System.Net.HttpWebRequest]::Create($Uri)
+        $CertRequest.Method = "GET"
+        $CertRequest.Proxy = New-Object System.Net.WebProxy($ProxyUri)
+        $CertRequest.KeepAlive = $false
+        $CertRequest.Timeout = 2000
+        $CertRequest.ServicePoint.ConnectionLeaseTimeout = 2000
+        $CertRequest.ServicePoint.MaxIdleTime = 2000
+        $Reponse = $CertRequest.GetResponse()
+    } catch [System.Net.WebException] {
+        if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::TrustFailure) {
+            # We ignore trust failures, since we only want the certificate, and the service point is still populated at this point
+            Write-Host -ForegroundColor Red "The certifcate for '$($Uri)' is not trusted"
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of an upstream proxy or other security layer that is intercepting requests"
+        }
+        else
+        {
+            Write-Warning $_.Exception.Message
+        }
+    } catch {
+        Write-Warning $_.Exception.Message
+    }
+
+    if (($CertRequest.ServicePoint.Certificate) -and ($CertRequest.ServicePoint.Certificate.Handle -ne 0)) {
+        if (!([String]::IsNullOrEmpty($Owner))) {
+            if ($CertRequest.ServicePoint.Certificate.Subject -inotlike $Owner) {
+                Write-Host -ForegroundColor Red "The '$($Uri)' appears to be impersonated by another issuer: $($CertRequest.ServicePoint.Certificate.Issuer)"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   It may be getting replaced by an upstream proxy or other security layer"
+            } else {
+                Write-Host -ForegroundColor Green "The certifcate for '$($Uri)' appears to be valid"
+            }
+        }
+    } else {
+        Write-Host -ForegroundColor Red "Unable to get certificate for '$($Uri)'"
+        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean requests are being intercepted by an upstream proxy or other security layer."
+    }
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+}
+
 Function ValueFromRegistry( $RegKey, $RegValue )
 {
     try {
@@ -554,6 +659,79 @@ Function CheckForHotfix( $Label, $Path, $ProductVersion, $FileVersion, $Hotfix )
     }
 }
 
+
+Function Get-JSON( $path ) {
+    try {
+        $contents = Get-Content $path -ErrorAction Stop 
+        $data = $contents | ConvertFrom-Json
+        return $data
+    } catch {
+        if ($_.Exception.HResult -ne -2146233087) {
+            Write-Verbose "Error reading connection file as Unicode '$($path)': $($_.Exception.Message)"
+            return $null
+        }
+    }
+}
+
+
+Function Report-DMZSelection( $fileName ) {
+    try {
+        $selection = Get-JSON( $DMZConfigPath + "\" + $fileName )
+        $products = Invoke-RestMethod $allowListUrl -Method 'GET' 
+
+        $list = ""
+        $selection.SelectedProducts | ForEach-Object {
+            $id = $_
+            $products.products | Where-Object id -eq $id | ForEach-Object {
+                $list += $_.friendlyName
+                $list += " (" + (($_.features | Where-Object -Property id -in -Value ($selection.SelectedFeatures)).friendlyName -join ", ") + ")"
+            }
+        }
+        $regions = (($products.products | Select-Object).features | Select-Object).regions | Where-Object -Property id -in -Value ($selection.SelectedRegions)| Select-Object -Property friendlyName -Unique
+        Write-Host "DMZ Secure Link products:" $list
+        Write-Host "Regions: " (($regions).friendlyName -join ", ")
+    } catch {
+        Write-Verbose "Error reading JSON file '$($path)': $($_.Exception.Message)"
+        return $null
+    }
+}
+
+Function Report-DMZConfig( $fileName ) {
+    try {
+        $config = Get-JSON( $DMZConfigPath + "\" + $fileName )
+
+        $info = "DMZ Secure Link is listening on port " + $config.Server.Port + " for "
+        if ([String]::IsNullOrEmpty( $config.Server.Address )) {
+            $info += "all addresses"
+        } else {
+            $info += $config.Server.Address
+        }
+ 
+        if ([String]::IsNullOrEmpty( $config.UpstreamProxy.Address )) {
+            $info += " and NO upstream proxy"
+        } else {
+            $info += " using " + $config.UpstreamProxy.Address + ":" + $config.UpstreamProxy.Port + " as the upstream proxy" 
+        }
+
+# Original/old format       
+#        $Upstream = "$($DMZConfig.UpstreamProxy.Address -Replace "\/$",""""):$($DMZConfig.UpstreamProxy.Port)"
+#        if ($DMZConfig.UpstreamProxy.Address -like "") {
+#            $Upstream = "without a forward proxy"
+#       } else {
+#            $Upstream = "forwarding to '$($DMZConfig.UpstreamProxy.Address -Replace "\/$",""""):$($DMZConfig.UpstreamProxy.Port)'"
+#        }
+#        if ($DMZConfig.Server.Address -like "") {
+#            $DMZServer = "(all addresses), Port: $($DMZConfig.Server.Port)"
+#        } else {
+#            $DMZServer = "$($DMZConfig.Server.Address -Replace "\/$",""""):$($DMZConfig.Server.Port)"
+#        }
+#        Write-Host "DMZ Secure Link is listening on $($DMZServer) and $($Upstream)"
+        Write-Host $info
+    } catch {
+        Write-Verbose "Error reading JSON file '$($path)': $($_.Exception.Message)"
+        return $null
+    }
+}
 
 
 # Script utility variables
@@ -637,23 +815,6 @@ if ($SystemProxy -ne $ProxyUri -or $UserProxy -ne $ProxyUri -or $SystemProxy -ne
     Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The user & system proxies should usually be consistent with '$($ProxyUri)'"
 }
 
-# Try to read local DMZ Secure Link configuration
-try {
-    $DMZConfig = Get-Content "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration\Config.json" -ErrorAction Stop | ConvertFrom-Json
-    $Upstream = "$($DMZConfig.UpstreamProxy.Address -Replace "\/$",""""):$($DMZConfig.UpstreamProxy.Port)"
-    if ($DMZConfig.UpstreamProxy.Address -like "") {
-        $Upstream = "without a forward proxy"
-    } else {
-        $Upstream = "forwarding to '$($DMZConfig.UpstreamProxy.Address -Replace "\/$",""""):$($DMZConfig.UpstreamProxy.Port)'"
-    }
-    if ($DMZConfig.Server.Address -like "") {
-        $DMZServer = "(all addresses), Port: $($DMZConfig.Server.Port)"
-    } else {
-        $DMZServer = "$($DMZConfig.Server.Address -Replace "\/$",""""):$($DMZConfig.Server.Port)"
-    }
-    Write-Host "DMZ Secure Link is listening on $($DMZServer) and $($Upstream)"
-} catch {
-}
 
 # Get summary information about all network interfaces
 Write-Host "Gathering details about all network interfaces..."
@@ -724,8 +885,8 @@ if ($Arch -eq "64-bit") {
     $BaseKey = "HKLM:\SOFTWARE"
 }
 Write-Host (GetFileVersion "Historian" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "aahCfgSvc.exe"))
-Write-Host (GetFileVersion "Publisher" (ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\HistorianPublisher\Setup") "LaunchTarget"))
-Write-Host (GetFileVersion "DMZ Secure Link" (ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\SecureLink\Setup") "LaunchTarget"))
+Write-Host (GetFileVersion "Publisher" (ValueFromRegistry "HKLM:\SOFTWARE\ArchestrA\HistorianPublisher\Setup" "LaunchTarget"))
+Write-Host (GetFileVersion "DMZ Secure Link" (ValueFromRegistry "HKLM:\SOFTWARE\ArchestrA\SecureLink\Setup" "LaunchTarget"))
 
 Write-Host " "
 Report-ProxyFromConfigFile "Replication (64-bit)" ((ValueFromRegistry ($BaseKey + "\ArchestrA\Historian\Setup") "InstallPath") + "x64\aahReplication.exe.config")
@@ -734,6 +895,12 @@ Report-ProxyFromConfigFile "Replication (2014 R2 SP1)" ((ValueFromRegistry ($Bas
 #Report-ProxyFromConfigFile "Publisher" ((Split-Path (ValueFromRegistry ("HKLM:\SOFTWARE\ArchestrA\HistorianPublisher\Setup") "LaunchTarget")) + "\aahIDAS.exe.config")
 Report-ProxyFromReplicationServers
 Report-ProxyFromConnectionFiles
+
+# Try to read local DMZ Secure Link configuration
+if ( ![String]::IsNullOrEmpty( (ValueFromRegistry "HKLM:\SOFTWARE\ArchestrA\SecureLink\Setup" "LaunchTarget") ) ) {
+    Report-DMZConfig "Config.json"
+    Report-DMZSelection "SelectedFeatures.json"
+}
 
 # Check for database problems
 CheckConnectionDetailsSize
@@ -777,42 +944,8 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
     # This helps confirm we're really reaching the site and not just getting a response from the proxy
     if ($HttpResult -eq 200) {
         Write-Host -ForegroundColor Green "Successfully connected to '$($InsightUri)' via proxy"
+        Report-CertValidity $InsightUri $ProxyUri "*O=AVEVA*"
 
-        try {
-            [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-            $CertRequest = [System.Net.HttpWebRequest]::Create($InsightUri)
-            $CertRequest.Proxy = New-Object System.Net.WebProxy($ProxyUri)
-            $CertRequest.KeepAlive = $false
-            $CertRequest.Timeout = 5000
-            $CertRequest.ServicePoint.ConnectionLeaseTimeout = 5000
-            $CertRequest.ServicePoint.MaxIdleTime = 5000
-        } catch [System.Net.WebException] {
-            if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::TrustFailure) {
-                # We ignore trust failures, since we only want the certificate, and the service point is still populated at this point
-                Write-Host -ForegroundColor Red "The certifcate for '$($InsightUri)' is not trusted"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of an upstream proxy or other security layer that is intercepting requests"
-            }
-            else
-            {
-                Write-Warning $_.Exception.Message
-            }
-        } catch {
-            Write-Warning $_.Exception.Message
-        }
-
-        if (($CertRequest.ServicePoint.Certificate) -and ($CertRequest.ServicePoint.Certificate.Handle -ne 0)) {
-            if ($CertRequest.ServicePoint.Certificate.Subject -inotlike"*O=AVEVA*") {
-                Write-Host -ForegroundColor Red "The '$($InsightUri)' appears to be impersonated by another issuer: $($CertRequest.ServicePoint.Certificate.Issuer)"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   It may be getting replaced by an upstream proxy or other security layer"
-            } else {
-                Write-Host -ForegroundColor Green "The certifcate for '$($InsightUri)' appears to be valid"
-            }
-        } else {
-            Write-Host -ForegroundColor Red "Unable to get certificate for '$($InsightUri)'"
-            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean requests are being intercepted by an upstream proxy or other security layer."
-        }
-        [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
-        
         # DMZ Secure Link: Confirm a site that is not part of the whitelist is blocked
         $BlockedStatus = Check-Http $CheckBlockedUri $ProxyUri $false
         if ($BlockedStatus -eq 406) {
@@ -857,10 +990,14 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
                 Write-Host -ForegroundColor Red "Failed insecure HTTP connection to '$($InsecureInsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($InsecureResult)))"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be a problem with the upstream proxy or Internet connectivity"
             }
-    } else {
-        Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
-        Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The outbound connections from the proxy may be blocked or there may be security protocol problems"
-        } 
+        } else {
+            if ($HttpResult -eq -9) {
+                Report-CertValidity $InsightUri $ProxyUri
+            } else {        
+                Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The outbound connections from the proxy may be blocked or there may be security protocol problems"
+            }
+        }
     }
 } else {
     Write-Host -ForegroundColor Red "Failed to open TCP connection to proxy at '$($ProxyUri)'"
