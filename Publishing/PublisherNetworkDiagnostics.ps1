@@ -677,19 +677,22 @@ Function Get-JSON( $path ) {
 Function Report-DMZSelection( $fileName ) {
     try {
         $selection = Get-JSON( $DMZConfigPath + "\" + $fileName )
-        $products = Invoke-RestMethod $allowListUrl -Method 'GET' 
 
-        $list = ""
-        $selection.SelectedProducts | ForEach-Object {
-            $id = $_
-            $products.products | Where-Object id -eq $id | ForEach-Object {
-                $list += $_.friendlyName
-                $list += " (" + (($_.features | Where-Object -Property id -in -Value ($selection.SelectedFeatures)).friendlyName -join ", ") + ")"
+        if ( $null -ne $selection ) {
+            $products = Invoke-RestMethod $allowListUrl -Method 'GET' 
+
+            $list = ""
+            $selection.SelectedProducts | ForEach-Object {
+                $id = $_
+                $products.products | Where-Object id -eq $id | ForEach-Object {
+                    $list += $_.friendlyName
+                    $list += " (" + (($_.features | Where-Object -Property id -in -Value ($selection.SelectedFeatures)).friendlyName -join ", ") + ")"
+                }
             }
+            $regions = (($products.products | Select-Object).features | Select-Object).regions | Where-Object -Property id -in -Value ($selection.SelectedRegions)| Select-Object -Property friendlyName -Unique
+            Write-Host "DMZ Secure Link products:" $list
+            Write-Host "Regions: " (($regions).friendlyName -join ", ")
         }
-        $regions = (($products.products | Select-Object).features | Select-Object).regions | Where-Object -Property id -in -Value ($selection.SelectedRegions)| Select-Object -Property friendlyName -Unique
-        Write-Host "DMZ Secure Link products:" $list
-        Write-Host "Regions: " (($regions).friendlyName -join ", ")
     } catch {
         Write-Verbose "Error reading JSON file '$($path)': $($_.Exception.Message)"
         return $null
