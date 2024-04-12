@@ -697,7 +697,7 @@ Function Report-DMZSelection( $fileName ) {
         $selection = Get-JSON( $DMZConfigPath + "\" + $fileName )
 
         if ( $null -ne $selection ) {
-            $products = Invoke-RestMethod $allowListUrl -Method 'GET' 
+            $products = Invoke-RestMethod $allowListUrl -Method 'GET' -Proxy $ProxyUri
 
             $list = ""
             $selection.SelectedProducts | ForEach-Object {
