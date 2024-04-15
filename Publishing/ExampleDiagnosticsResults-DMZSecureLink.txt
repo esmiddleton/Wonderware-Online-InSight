@@ -1,4 +1,4 @@
-2020-02-24 11:48:19 -05:00
+2024-02-24 11:48:19 -05:00
 WinDMZ (DMZ workgroup)
 Windows 10 Pro (64-bit) 1909 (18363)
 Powershell 5.1 (64-bit), CLR 4.0.30319 (Standard User)
@@ -19,8 +19,12 @@ ID Interface                                IPAddress             Source Gateway
 
 Historian: Not found
 Publisher: Not found
-DMZ Secure Link: 2019.1128.513.1 28-Nov-2019
- 
+DMZ Secure Link: 2023.0630.1823.4 (30-Jun-2023)
+
+DMZ Secure Link is listening on port 8080 for all addresses using 10.1.1.10:8888 as the upstream proxy
+DMZ Secure Link products: AVEVA Insight (Insight Browsing, Insight Publishing)
+Regions:  North America, Europe, Australia
+
 Testing connectivity to 'https://online.wonderware.com' via proxy 'http://10.1.1.10:8888'
 Route to proxy at '10.1.1.10' is on '192.168.2.15' via gateway of '192.168.2.11' using interface #5
 Successfully reached gateway at '192.168.2.11' via 'ping'
@@ -46,4 +50,4 @@ Successfully reached 'stats.g.doubleclick.net' via proxy
 Successfully reached 'cdn.connect.aveva.com' via proxy
 Successfully reached 'www.google-analytics.com' via proxy
  
-Tests completed at 2020-02-24 11:48:31 -05:00
+Tests completed at 2024-02-24 11:48:31 -05:00
