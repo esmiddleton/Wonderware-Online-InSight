@@ -48,6 +48,8 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
+$ScriptRevision = 1.28
+
 Function Check-Ping ($HostOrIP) {
     try {
         $result = Test-Connection -ComputerName $HostOrIP -Count 1 -ErrorAction Stop
@@ -639,7 +641,7 @@ Function ValueFromRegistry( $RegKey, $RegValue )
 }
 
 Function GetFileVersion( $Label, $Path ) {
-    $info = $Label + ": Not found"
+    $info = $Label + ": Not found locally"
     if ( (![String]::IsNullOrEmpty($Path)) -and (Test-Path $Path -PathType leaf)) {
         $info = $Label + ": "
         $info += [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path).FileVersion
@@ -757,6 +759,9 @@ Function Report-DMZConfig( $fileName ) {
 
 Write-Host ""
 Write-Host "$(Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")"
+$ThisScript = Get-ItemProperty $MyInvocation.MyCommand.Path
+Write-Host $ThisScript.Name $ScriptRevision $ThisScript.LastWriteTime.ToString("(dd-MMM-yyyy HH:mm)")
+
 $Environment = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion")
 $Arch = (Get-WmiObject Win32_OperatingSystem).OSArchitecture
 $PSVersion = (Get-Host).Version
