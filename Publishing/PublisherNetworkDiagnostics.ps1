@@ -48,13 +48,18 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
-$ScriptRevision = 1.29
+$ScriptRevision = 1.30
+
+
+function fnLN {
+    $MyInvocation.ScriptLineNumber
+}
 
 Function Check-Ping ($HostOrIP) {
     try {
         $result = Test-Connection -ComputerName $HostOrIP -Count 1 -ErrorAction Stop
     } catch {
-        Write-Verbose "Unable to ping '$HostOrIP'"
+        Write-Verbose "$(fnLn): Unable to ping '$HostOrIP'"
     }
     return $result
 }
@@ -122,11 +127,11 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
                 $status = $data
             }
         } else {
-            Write-Verbose "Request for '$($Uri)' returned an unexpected result: $($_.Exception.Status), $($_.Exception.HResult)"
+            Write-Verbose "$(fnLn): Request for '$($Uri)' returned an unexpected result: $($_.Exception.Status), $($_.Exception.HResult)"
         }
         $response.Close()
     } catch [System.Net.WebException] {
-        Write-Verbose "Exception requesting '$($Uri)' returned an unexpected result: $($_.Exception.HResult), $($response.StatusCode)"
+        Write-Verbose "$(fnLn): Exception requesting '$($Uri)' returned an unexpected result: $($_.Exception.HResult), $($response.StatusCode)"
         if ($_.Exception.HResult -eq -2146233087 -or $_.Exception.Status -eq [System.Net.WebExceptionStatus]::SendFailure) {
             $status = -1
         } else {
@@ -137,7 +142,7 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
             }
         }
     } catch {
-        Write-Verbose "Error attempting to get '$($Uri)': $($_.Exception.Message)"
+        Write-Verbose "$(fnLn): Error attempting to get '$($Uri)': $($_.Exception.Message)"
         if ($_.Exception.HResult) {
             $status = $_.Exception.HResult
         }
@@ -145,7 +150,7 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
         $Http = $null
         $response = $null
     }
-    Write-Verbose "Host: $($Uri)  Proxy: $($ProxyUri)  Status: $($status)  Protocol(s): $([Net.ServicePointManager]::SecurityProtocol)"
+    Write-Verbose "$(fnLn): Host: $($Uri)  Proxy: $($ProxyUri)  Status: $($status)  Protocol(s): $([Net.ServicePointManager]::SecurityProtocol)"
     return $status
 }
 
@@ -195,7 +200,7 @@ Function Get-IpAddress ($HostOrIP) {
     } else {
         try {
             $ip = ([System.Net.Dns]::GetHostEntry($HostOrIP).AddressList | Where-Object AddressFamily -eq "InterNetwork" | Select-Object -First 1).IPAddressToString
-            Write-Verbose "Also found IPv6 address $([System.Net.Dns]::GetHostEntry($HostOrIP).AddressList | Where-Object AddressFamily -eq "InterNetworkV6" | Select-Object -First 1).IPAddressToString)"
+            Write-Verbose "$(fnLn): Also found IPv6 address $([System.Net.Dns]::GetHostEntry($HostOrIP).AddressList | Where-Object AddressFamily -eq "InterNetworkV6" | Select-Object -First 1).IPAddressToString)"
         } catch {
             $ip = ""
         }
@@ -228,7 +233,7 @@ Function Get-ProxyFromConfigFile( $path ) {
     try {
         [xml]$config = Get-Content $path -ErrorAction Stop
     } catch {
-        Write-Verbose "Error reading proxy configuration from '$($path)': $($_.Exception.Message)"
+        Write-Verbose "$(fnLn): Error reading proxy configuration from '$($path)': $($_.Exception.Message)"
         return $null
     }
 
@@ -245,7 +250,7 @@ Function Get-ProxyFromConfigFile( $path ) {
         } else {
             $proxy = $default.proxy.proxyaddress
         }        
-        Write-Verbose "A default proxy specified in '$($path)' is $($status) '$($proxy)'"
+        Write-Verbose "$(fnLn): A default proxy specified in '$($path)' is $($status) '$($proxy)'"
         return $proxy -replace "\/$",""
     } catch {
         return $null
@@ -259,9 +264,9 @@ Function Get-ProxyFromConnectionString( $connectionstring ) {
         return $proxy -replace "^""","" -replace "\/$","" -replace """$",""
     } catch {
         if ($connectionstring.Length -gt 20) {
-            Write-Verbose "Error parsing connection string '$($connectionstring.Substring(0,20))...': $($_.Exception.Message)"
+            Write-Verbose "$(fnLn): Error parsing connection string '$($connectionstring.Substring(0,20))...': $($_.Exception.Message)"
         } else {
-            Write-Verbose "Error parsing connection string '$($connectionstring)...': $($_.Exception.Message)"
+            Write-Verbose "$(fnLn): Error parsing connection string '$($connectionstring)...': $($_.Exception.Message)"
         }
         return ""
     }
@@ -277,7 +282,7 @@ Function Get-XML( $path ) {
         return $contents
     } catch {
         if ($_.Exception.HResult -ne -2146233087) {
-            Write-Verbose "Error reading connection file as Unicode '$($path)': $($_.Exception.Message)"
+            Write-Verbose "$(fnLn): Error reading connection file as Unicode '$($path)': $($_.Exception.Message)"
             return $null
         }
     }
@@ -287,7 +292,7 @@ Function Get-XML( $path ) {
         return $contents
     } catch {
         if ($_.Exception.HResult -ne -2146233087) {
-            Write-Verbose "Error reading connection file as UTF-8 '$($path)': $($_.Exception.Message)"
+            Write-Verbose "$(fnLn): Error reading connection file as UTF-8 '$($path)': $($_.Exception.Message)"
             return $null
         }
     }
@@ -297,7 +302,7 @@ Function Get-XML( $path ) {
         return $contents
     } catch {
         if ($_.Exception.HResult -ne -2146233087) {
-            Write-Verbose "Error reading connection file as ASCII '$($path)': $($_.Exception.Message)"
+            Write-Verbose "$(fnLn): Error reading connection file as ASCII '$($path)': $($_.Exception.Message)"
             return $null
         }
     }
@@ -309,7 +314,7 @@ Function Get-DetailsFromConnectionFile( $path ) {
         $connectionString = $config.idasConfiguration.details
         return $connectionString
     } catch {
-        Write-Verbose "Error reading connection file '$($path)': $($_.Exception.Message)"
+        Write-Verbose "$(fnLn): Error reading connection file '$($path)': $($_.Exception.Message)"
         return $null
     }
 }
@@ -355,7 +360,7 @@ Function QuerySQL( $QueryText, $Label ) {
             return $Result
         } catch {
             $SQLFailed = $true
-            Write-Verbose "Error connecting to local Historian $($Label): $($_.Exception.Message)"
+            Write-Verbose "$(fnLn): Error connecting to local Historian $($Label): $($_.Exception.Message)"
             return ""
         }
     }
@@ -368,7 +373,7 @@ Function CheckConnectionDetailsSize( ) {
         if ($Result.Size -lt 4000) {
             Write-Host -ForegroundColor Red "Database schema was not correctly migrated--'ConnectionDetails' is too small ($($Result.Size))"
         } else {
-            Write-Verbose "Database column 'ConnectionDetails' is ($($Result.Size))"
+            Write-Verbose "$(fnLn): Database column 'ConnectionDetails' is ($($Result.Size))"
         }
     }
 }
@@ -379,7 +384,7 @@ Function CheckSyncQueueSize( ) {
         if ($Result.Entries -ge 5000) {
             Write-Host -ForegroundColor Red "The current size of the replication sync queue is very high ($($Result.Entries)) and likely needs to be cleaned out with 'CleanupSyncQueue.sql', available from Tech Support"
         } else {
-            Write-Verbose "Replicaton sync queue size is ($($Result.Entries))"
+            Write-Verbose "$(fnLn): Replicaton sync queue size is ($($Result.Entries))"
         }
     }
 }
@@ -399,7 +404,7 @@ Function Report-ProxyFromConnectionFiles( ) {
         }
         Report-ProxyList "Publisher Configuration" $Files
     } catch {
-        Write-Verbose "Error getting Publisher configuration files: $($_.Exception.Message)"
+        Write-Verbose "$(fnLn): Error getting Publisher configuration files: $($_.Exception.Message)"
         return ""
     }
 }
@@ -426,7 +431,7 @@ Function Report-Ping($label, $hostname)
             Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This could mean that ICMP is disabled, the system is offline or that TCP route/gateway is not correctly configured"
         }
     } else {
-        Write-Verbose "The hostname for $($label) was not valid: '$($hostname)'"
+        Write-Verbose "$(fnLn): The hostname for $($label) was not valid: '$($hostname)'"
     }
 
 }
@@ -511,11 +516,11 @@ Function Report-Hostname( $hostname, $Required )
         if ($Required) {
             Write-Host -ForegroundColor Red "Required hostname is blank"
         } else {
-            Write-Verbose "Hostname is blank"
+            Write-Verbose "$(fnLn): Hostname is blank"
         }
     } else {
         if ([Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv4 -or [Uri]::CheckHostName($hostname) -eq [UriHostNameType]::IPv6) {
-            Write-Verbose "'$($hostname)' is recognized as an IP address"
+            Write-Verbose "$(fnLn): '$($hostname)' is recognized as an IP address"
         } else {
             try {
                 $ip = ([System.Net.Dns]::GetHostEntry($hostname)).AddressList | Select-Object -ExpandProperty "IPAddressToString"
@@ -544,7 +549,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {
         param($sender, $certificate, $chain, $sslPolicyErrors)
 
-        Write-Verbose "Checking validity of the certificate for '$Uri' issued by '$($Certificate.IssuerName.Name)'"
+        Write-Verbose "$(fnLn): Checking validity of the certificate for '$Uri' issued by '$($Certificate.IssuerName.Name)'"
         #If ($sslPolicyErrors
 
         $problemFound = $false
@@ -553,7 +558,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
             #$ce = $_
             $ce = $chain.ChainElements[$_]
             $cert = $ce.Certificate
-            Write-Verbose "`t'$($cert.Subject)' from '$($cert.IssuerName.Name)'"
+            Write-Verbose "`t$(fnLn): '$($cert.Subject)' from '$($cert.IssuerName.Name)'"
 
             if ([DateTime]::Now -gt $cert.NotAfter) {
                 Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
@@ -601,11 +606,13 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     try {
         $CertRequest = [System.Net.HttpWebRequest]::Create($Uri)
         $CertRequest.Method = "GET"
-        $CertRequest.Proxy = New-Object System.Net.WebProxy($ProxyUri)
         $CertRequest.KeepAlive = $false
         $CertRequest.Timeout = 2000
         $CertRequest.ServicePoint.ConnectionLeaseTimeout = 2000
         $CertRequest.ServicePoint.MaxIdleTime = 2000
+        if ( $ProxyUri -ne "" ) {
+            $CertRequest.Proxy = New-Object System.Net.WebProxy($ProxyUri)
+        }
         $Reponse = $CertRequest.GetResponse()
     } catch [System.Net.WebException] {
         if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::TrustFailure) {
@@ -704,7 +711,7 @@ Function Get-JSON( $path ) {
         return $data
     } catch {
         if ($_.Exception.HResult -ne -2146233087) {
-            Write-Verbose "Error reading connection file as Unicode '$($path)': $($_.Exception.Message)"
+            Write-Verbose "$(fnLn): Error reading connection file as Unicode '$($path)': $($_.Exception.Message)"
             return $null
         }
     }
@@ -731,7 +738,7 @@ Function Report-DMZSelection( $fileName ) {
             Write-Host "Regions: " (($regions).friendlyName -join ", ")
         }
     } catch {
-        Write-Verbose "Error reading JSON file '$($path)': $($_.Exception.Message)"
+        Write-Verbose "$(fnLn): Error reading JSON file '$($path)': $($_.Exception.Message)"
         return $null
     }
 }
@@ -768,7 +775,7 @@ Function Report-DMZConfig( $fileName ) {
 #        Write-Host "DMZ Secure Link is listening on $($DMZServer) and $($Upstream)"
         Write-Host $info
     } catch {
-        Write-Verbose "Error reading JSON file '$($path)': $($_.Exception.Message)"
+        Write-Verbose "$(fnLn): Error reading JSON file '$($path)': $($_.Exception.Message)"
         return $null
     }
 }
