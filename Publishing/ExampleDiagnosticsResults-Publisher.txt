@@ -1,4 +1,5 @@
 2024-02-24 09:43:29 -08:00
+PublisherNetworkDiagnostics.ps1 1.29 (03-May-2024 12:56)
 HISTSRV (SCADA workgroup)
 Windows 10 Pro (64-bit) 1909 (18363)
 Powershell 5.1 (64-bit), CLR 4.0.30319 (Standard User)
@@ -9,6 +10,7 @@ Powershell Security Protocols: Tls, Tls11, Tls12, Tls13
 The user's 'Internet Options' proxy is ''
 The system WinHTTP proxy is ''
    The user & system proxies should usually be consistent with 'http://192.168.2.15:8080'
+The configured DNS servers are: 10.1.1.250
 Gathering details about all network interfaces...
 
 ID Interface                                IPAddress             Source Gateway      Destination Network       Status Type Count
@@ -18,7 +20,7 @@ ID Interface                                IPAddress             Source Gateway
 
 Historian: 2020.1212.3848.5 (06-Apr-2021)
 Publisher: 2020.1208.2898.4 (07-Dec-2020)
-DMZ Secure Link: Not found
+DMZ Secure Link: Not found locally
  
 Replication (64-bit) file proxy: Not specified
 Replication Servers proxies:
@@ -30,14 +32,14 @@ Publisher Configuration proxies:
 Historian 20.1.001 requires an upgrade to 20.1.100 and then requires hotfix 1208899
    Can still connect, but expect problems later if you do not upgrade
 
-Testing connectivity to 'https://online.wonderware.com' via proxy 'http://192.168.2.15:8080'
+Testing connectivity to 'https://insight.connect.aveva.com' via proxy 'http://192.168.2.15:8080'
 Route to proxy at '192.168.2.15' is on '192.168.1.55' via gateway of '192.168.1.10' using interface #7
 Successfully reached proxy at '192.168.2.15' on port '8080'
-Successfully connected to 'https://online.wonderware.com' via proxy
-The certifcate for 'https://online.wonderware.com' appears to be valid
+Successfully connected to 'https://insight.connect.aveva.com' via proxy
+The certifcate for 'https://insight.connect.aveva.com' appears to be valid
 DMZ Secure Link correctly blocked access to 'http://www.apple.com'
-Successfully retrieved list of key URLs used by Insight from 'https://online.wonderware.com'
-Successfully reached 'online.wonderware.com' via proxy
+Successfully retrieved list of key URLs used by Insight from 'https://insight.connect.aveva.com'
+Successfully reached 'insight.connect.aveva.com' via proxy
 Successfully reached 'online.wonderware.eu' via proxy
 Successfully reached 'online.wonderware.net.au' via proxy
 Successfully reached 'signin.connect.aveva.com' via proxy
