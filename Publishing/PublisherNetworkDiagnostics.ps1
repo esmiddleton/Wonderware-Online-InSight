@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 12-Apr-2024
+# Modified: 4-May-2024
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -48,7 +48,7 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
-$ScriptRevision = 1.28
+$ScriptRevision = 1.29
 
 Function Check-Ping ($HostOrIP) {
     try {
@@ -95,9 +95,11 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
     $Http.Method = "GET"
     $Http.Accept = "*/*"
     $Http.AllowAutoRedirect = $false
-    $Http.Proxy = New-Object System.Net.WebProxy($ProxyUri)
     $Http.Timeout = 10000
     $Http.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36"
+    if ( $ProxyUri -ne "" ) {
+        $Http.Proxy = New-Object System.Net.WebProxy($ProxyUri)
+    }
 
     if ( [Enum]::GetValues([Net.SecurityProtocolType]) -Like "Tls12" ) {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13 
@@ -120,17 +122,18 @@ Function Check-Http( $Uri, $ProxyUri, $ReturnData  ) {
                 $status = $data
             }
         } else {
-            Write-Verbose "Request for '$($Uri)' returned an unexpected result: $($status), $($response.StatusCode)"
+            Write-Verbose "Request for '$($Uri)' returned an unexpected result: $($_.Exception.Status), $($_.Exception.HResult)"
         }
         $response.Close()
     } catch [System.Net.WebException] {
+        Write-Verbose "Exception requesting '$($Uri)' returned an unexpected result: $($_.Exception.HResult), $($response.StatusCode)"
         if ($_.Exception.HResult -eq -2146233087 -or $_.Exception.Status -eq [System.Net.WebExceptionStatus]::SendFailure) {
             $status = -1
         } else {
             if ($_.Exception.Message -Like "*(403)*" -or $_.Exception.Message -Like "*(406)*") {
                 $status = 406
             } else {
-                $status = [int]$_.Exception.Status
+                $status = [int]$_.Exception.HResult
             }
         }
     } catch {
@@ -431,26 +434,31 @@ Function Report-Ping($label, $hostname)
 Function Report-Port($label, $hostname, $port) 
 {
     $TcpResult = $null
-    $TcpResult = Check-Port $hostname $port
-    if ($TcpResult) {
-        Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' on port '$($port)'"
+    if ( ( $hostname -eq "") -or ( $port -eq "" ) ) {
+        Write-Host -ForegroundColor Red "The $($label) was not correctly identified ($($hostname):$($port))"
+        return $true
     } else {
-        Write-Host -ForegroundColor Red "Failed to reach $($label) on port '$($port)' at '$($hostname)'"
-        if (Check-Ping $hostname) {
-            Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' using 'ping'"
-            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This means the TCP route is working, but the port is blocked by a hardware or software firewall or the service is not running"
+        $TcpResult = Check-Port $hostname $port
+        if ($TcpResult) {
+            Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' on port '$($port)'"
         } else {
-            $route = Check-Route $hostname
-            if ($route) {
-                Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)' from '$(Get-FirstAddress($route.IPAddress))' using route via '$(Get-FirstAddress($Route.NextHop))'"
+            Write-Host -ForegroundColor Red "Failed to reach $($label) on port '$($port)' at '$($hostname)'"
+            if (Check-Ping $hostname) {
+                Write-Host -ForegroundColor Green "Successfully reached $($label) at '$($hostname)' using 'ping'"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This means the TCP route is working, but the port is blocked by a hardware or software firewall or the service is not running"
             } else {
-                Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)'"
+                $route = Check-Route $hostname
+                if ($route) {
+                    Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)' from '$(Get-FirstAddress($route.IPAddress))' using route via '$(Get-FirstAddress($Route.NextHop))'"
+                } else {
+                    Write-Host -ForegroundColor Red "Failed 'ping' test to '$($hostname)'"
+                }
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the TCP route/gateway is not correctly configured"
+                $route = $null
             }
-            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the TCP route/gateway is not correctly configured"
-            $route = $null
         }
+        return $TcpResult
     }
-    return $TcpResult
 }
 
 Function Report-Route($label, $Address) {
@@ -477,14 +485,18 @@ Function Report-Uri($Uri, $ProxyUri, $Required)
 {
     $HttpResult = $null
     $HttpResult = Check-Http $Uri $ProxyUri $false
+    $ProxyType = "via"
+    if ($ProxyUri -eq "" ) {
+        $ProxyType = "without"
+    }
     $hostname = ([System.Uri]$Uri).Host
     if ($HttpResult -eq 200 -or $HttpResult -eq 301 -or $HttpResult -eq 302) {
-        Write-Host -ForegroundColor Green "Successfully reached '$($hostname)' via proxy"
+        Write-Host -ForegroundColor Green "Successfully reached '$($hostname)' $($ProxyType) proxy"
     } else {
         if ($Required) {
-            Write-Host -ForegroundColor Red "Failed to reach host '$($hostname)' via proxy"
+            Write-Host -ForegroundColor Red "Failed to reach host '$($hostname)' $($ProxyType) proxy"
         } else {
-            Write-Host -ForegroundColor Red "Failed to reach optional host '$($hostname)' via proxy"
+            Write-Host -ForegroundColor Red "Failed to reach optional host '$($hostname)' $($ProxyType) proxy"
         }
         Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the proxy is not correctly configured"
         Report-Hostname ([System.Uri]$Uri).Host $false
@@ -679,6 +691,11 @@ Function CheckForHotfix( $Label, $Path, $ProductVersion, $FileVersion, $Hotfix, 
     }
 }
 
+Function Report-DNS {
+    $dnsServers = ((Get-NetIPConfiguration).DNSServer | Where-Object -Property ServerAddresses.ServerAddresses -ne "{}" |  Select-Object -Property ServerAddresses -Unique ).ServerAddresses
+    Write-Host "The configured DNS servers are: $($dnsServers)"
+}
+
 
 Function Get-JSON( $path ) {
     try {
@@ -840,8 +857,10 @@ if ($ProxyIP -ne "" -and $ProxyPort -ne "") {
         }
     }
     $ProxyParts = $ProxyUri -replace "http://","" -split(':')
-    $ProxyIP = Get-IpAddress( $ProxyParts[0] )
-    $ProxyPort = $ProxyParts[1]
+    if ( $ProxyParts.Length -gt 1 ) {
+        $ProxyIP = Get-IpAddress( $ProxyParts[0] )
+        $ProxyPort = $ProxyParts[1]
+    }
 }
 
 if ($SystemProxy -ne $ProxyUri -or $UserProxy -ne $ProxyUri -or $SystemProxy -ne $UserProxy) {
@@ -850,6 +869,7 @@ if ($SystemProxy -ne $ProxyUri -or $UserProxy -ne $ProxyUri -or $SystemProxy -ne
 
 
 # Get summary information about all network interfaces
+Report-DNS
 Write-Host "Gathering details about all network interfaces..."
 $AllNics = @()
 try {
@@ -969,14 +989,18 @@ if ($ProxyIP -ne "") {
 
 # Confirm we can reach the proxy/DMZ Secure Link
 if (Report-Port "proxy" $ProxyIP $ProxyPort) {
+    $ProxyType = "via"
+    if ($ProxyUri -eq "" ) {
+        $ProxyType = "without"
+    }
+
     # Confirm the proxy can reach a AVEVA Insight endpoint
-    $HttpResult = $null
     $HttpResult = Check-Http $InsightUri $ProxyUri $false
 
     # Check the certificate (adapted from https://communary.net/2017/08/16/retrieve-ssl-certificate-information/)
     # This helps confirm we're really reaching the site and not just getting a response from the proxy
     if ($HttpResult -eq 200) {
-        Write-Host -ForegroundColor Green "Successfully connected to '$($InsightUri)' via proxy"
+        Write-Host -ForegroundColor Green "Successfully connected to '$($InsightUri)' $($ProxyType) proxy"
         Report-CertValidity $InsightUri $ProxyUri "*O=AVEVA*"
 
         # DMZ Secure Link: Confirm a site that is not part of the whitelist is blocked
@@ -999,7 +1023,7 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
 
     } else {
         if ($HttpResult -eq -1) {
-            Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
+            Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' $($ProxyType) proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
             if (!$TlsOkay) {
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This failure was likely because TLS 1.2 was not available to Powershell"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   If your Publisher was released before Dec-2018, you need to force strong cryptography"
@@ -1015,20 +1039,27 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
                 Write-Host -ForegroundColor Gray "    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\.NetFramework\v4.0.30319' -Name 'SchUseStrongCrypto' -Value '1' -Type DWord"
                 Write-Host -ForegroundColor Gray "    Write ""32-bit .NET applications will now require strong cryptography"""
             }
-            Write-Host "Retrying with insecure connection (HTTP) to '$($InsecureInsightUri)' via proxy '$($ProxyUri)'"
+            Write-Host "Retrying with insecure connection (HTTP) to '$($InsecureInsightUri)' $($ProxyType) proxy '$($ProxyUri)'"
             $InsecureResult = Check-Http $InsecureInsightUri $ProxyUri $false
             if ($InsecureResult -eq 301) {
-                Write-Host -ForegroundColor Green "Successfully connected to '$($InsecureInsightUri)' (insecure) via proxy"
+                Write-Host -ForegroundColor Green "Successfully connected to '$($InsecureInsightUri)' (insecure) $($ProxyType) proxy"
             } else {
-                Write-Host -ForegroundColor Red "Failed insecure HTTP connection to '$($InsecureInsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($InsecureResult)))"
+                Write-Host -ForegroundColor Red "Failed insecure HTTP connection to '$($InsecureInsightUri)' $($ProxyType) proxy at '$($ProxyUri)' (Status $(Get-StatusText($InsecureResult)))"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be a problem with the upstream proxy or Internet connectivity"
+                Report-Hostname ([System.Uri]$InsightUri).Host $true
             }
         } else {
-            if ($HttpResult -eq -9) {
-                Report-CertValidity $InsightUri $ProxyUri
+            if ($HttpResult -eq -2146233079) {
+                Write-Host -ForegroundColor Red "Connection to '$($InsightUri)' failed due to a timeout (Status $(Get-StatusText($HttpResult)))"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   There may be a problem in the network routing configuration"
             } else {        
-                Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' via proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The outbound connections from the proxy may be blocked or there may be security protocol problems"
+                if ($HttpResult -eq -9) {
+                    Report-CertValidity $InsightUri $ProxyUri
+                } else {        
+                    Write-Host -ForegroundColor Red "Failed HTTPS connection to '$($InsightUri)' $($ProxyType) proxy at '$($ProxyUri)' (Status $(Get-StatusText($HttpResult)))"
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   The outbound connections from the proxy may be blocked or there may be security protocol problems"
+                    Report-Hostname ([System.Uri]$InsightUri).Host $true
+                }
             }
         }
     }
