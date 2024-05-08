@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 4-May-2024
+# Modified: 8-May-2024
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -41,15 +41,22 @@ $CheckBlockedUri = "http://www.apple.com"
 $VerbosePreference = "SilentlyContinue" # Don't include more detailed tracing
 #$VerbosePreference = "Continue" # Include more detailed tracing output
 
-$allowListUrl = 'https://insight.connect.aveva.com/apis/wwocorefunctions/api/OnlineConfigPush?config=dmzv2'
+																										   
 $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 
 #
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
-$ScriptRevision = 1.30
+$ScriptRevision = "1.31"
 
+# Script utility variables
+$InsightUri = "https://" + $InsightHost
+$InsecureInsightUri = "http://" + $InsightHost
+$allowListUrl = 'https://insight.connect.aveva.com/apis/wwocorefunctions/api/OnlineConfigPush?config=dmzv2'
+$publisherListUrl = $InsightUri + "/apis/wwocorefunctions/api/OnlineConfigPush?config=publisher"
+
+$ProxyUri = ""
 
 function fnLN {
     $MyInvocation.ScriptLineNumber
@@ -177,13 +184,15 @@ Function Get-UserProxy
         $proxy = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').proxyServer
         if ($proxy)
         {
-            if ($proxy -ilike "*=*")
+            if ($proxy -like "*=*")
             {
                 $proxy = $proxy -replace "=","://" -split(';') | Select-Object -First 1
             }
             else
             {
-                $proxy = "http://" + $proxy
+                if ( $proxy -notmatch "^http" ) {
+                    $proxy = "http://" + $proxy
+                }
             }
         }
     } else {
@@ -504,6 +513,7 @@ Function Report-Uri($Uri, $ProxyUri, $Required)
             Write-Host -ForegroundColor Red "Failed to reach optional host '$($hostname)' $($ProxyType) proxy"
         }
         Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the proxy is not correctly configured"
+        Report-CertValidity $Uri $ProxyUri ""
         Report-Hostname ([System.Uri]$Uri).Host $false
     }
 #    Report-Hostname $Uri $false
@@ -544,7 +554,7 @@ Function Report-Hostname( $hostname, $Required )
     }
 }
 
-
+[Net.ServicePointManager]::ServerCertificateValidationCallback = $null
 Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {
         param($sender, $certificate, $chain, $sslPolicyErrors)
@@ -562,7 +572,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
 
             if ([DateTime]::Now -gt $cert.NotAfter) {
                 Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy')))"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy'))) or because your trusted certificate authorities are out of date"
                 $problemFound = $true
                 return $false
             }
@@ -606,6 +616,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     try {
         $CertRequest = [System.Net.HttpWebRequest]::Create($Uri)
         $CertRequest.Method = "GET"
+																	  
         $CertRequest.KeepAlive = $false
         $CertRequest.Timeout = 2000
         $CertRequest.ServicePoint.ConnectionLeaseTimeout = 2000
@@ -630,7 +641,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
 
     if (($CertRequest.ServicePoint.Certificate) -and ($CertRequest.ServicePoint.Certificate.Handle -ne 0)) {
         if (!([String]::IsNullOrEmpty($Owner))) {
-            if ($CertRequest.ServicePoint.Certificate.Subject -inotlike $Owner) {
+            if ($CertRequest.ServicePoint.Certificate.Subject -notlike $Owner) {
                 Write-Host -ForegroundColor Red "The '$($Uri)' appears to be impersonated by another issuer: $($CertRequest.ServicePoint.Certificate.Issuer)"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   It may be getting replaced by an upstream proxy or other security layer"
             } else {
@@ -641,6 +652,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
         Write-Host -ForegroundColor Red "Unable to get certificate for '$($Uri)'"
         Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean requests are being intercepted by an upstream proxy or other security layer."
     }
+    $CertRequest = $null
     [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
 }
 
@@ -783,7 +795,7 @@ Function Report-DMZConfig( $fileName ) {
 
 Write-Host ""
 Write-Host "$(Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")"
-$ThisScript = Get-ItemProperty $MyInvocation.MyCommand.Path
+$ThisScript = Get-ItemProperty ($PSScriptRoot + "\" + $MyInvocation.MyCommand.Name)
 Write-Host $ThisScript.Name $ScriptRevision $ThisScript.LastWriteTime.ToString("(dd-MMM-yyyy HH:mm)")
 
 $Environment = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion")
@@ -811,8 +823,8 @@ if ((New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsI
 
 Write-Host "$($FQDN) ($($Domain))"
 Write-Host "$($Environment.ProductName) ($($Arch)) $(if ($Environment.ReleaseId) {$Environment.ReleaseId}) ($($Environment.CurrentBuildNumber))"
-Write-Host "Powershell $($PSVersion.Major).$($PSVersion.Minor) ($($PSArch)), CLR $($PSVersionTable.CLRVersion.Major).$($PSVersionTable.CLRVersion.Minor).$($PSVersionTable.CLRVersion.Build) ($($UserType))"
-Write-Host "User: $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+Write-Host "Powershell $($PSVersion.Major).$($PSVersion.Minor) ($($PSArch)), CLR $($PSVersionTable.CLRVersion.Major).$($PSVersionTable.CLRVersion.Minor).$($PSVersionTable.CLRVersion.Build) ($($MyInvocation.HistoryId))"
+Write-Host "User: $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) ($($UserType))"
 
 Write-Host "Powershell Security Protocols: $([Enum]::GetValues([Net.SecurityProtocolType]) -Like "Tls*" -Join ", ")"
 $Crypto = ".NET Require Strong Cryptography: "
@@ -842,9 +854,9 @@ if ($PSVersionTable.CLRVersion.Major -lt 4) {
     Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Other software on this system MAY support it, but this script will fail"
 }
 
-# Script utility variables
-$InsightUri = "https://" + $InsightHost
-$InsecureInsightUri = "http://" + $InsightHost
+						  
+									   
+											  
 
 # Display various proxy settings to let the user check for consistency
 $SystemProxy = Get-SystemProxy
@@ -933,7 +945,7 @@ try {
         $AllNics += $nic
     }
 }
-$AllNics | Format-Table
+$AllNics | Format-Table -AutoSize
 } catch {
     Write-Host "Addresses: $($Addresses)"
 }
@@ -1019,13 +1031,14 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
             Write-Host -BackgroundColor Black -ForegroundColor Cyan "   If the proxy specified is DMZ Secure Link, that should be blocked. Other proxies might permit access."
         }
 
-        $list = Check-Http($InsightUri + "/apis/wwocorefunctions/api/OnlineConfigPush?config=publisher") $ProxyUri $true
+        $list = Check-Http $publisherListUrl $ProxyUri $true
         if ($list.PSobject.Properties.Name -contains "URLs") {
              Write-Host -ForegroundColor Green "Successfully retrieved list of key URLs used by Insight from '$($InsightUri)'"
              $list.URLs | ForEach-Object -Process { $HttpResult = Report-Uri $_.URL $ProxyUri $_.AccessMandatory }
         } else {
              Write-Host -ForegroundColor Red "Unable to retrieve list of needed sites from Insight"
              Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean the proxy is not correctly configured"
+             Report-CertValidity $publisherListUrl $ProxyUri ""
         }
 
     } else {
@@ -1058,7 +1071,7 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
         } else {
             if ($HttpResult -eq -2146233079) {
                 Write-Host -ForegroundColor Red "Connection to '$($InsightUri)' failed due to a timeout (Status $(Get-StatusText($HttpResult)))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   There may be a problem in the network routing configuration"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   There may be a problem in the network routing configuration or you may need to stop/restart Powershell"
             } else {        
                 if ($HttpResult -eq -9) {
                     Report-CertValidity $InsightUri $ProxyUri
@@ -1084,3 +1097,4 @@ if (Report-Port "proxy" $ProxyIP $ProxyPort) {
 
 Write-Host " "
 Write-Host "Tests completed at $(Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")"
+
