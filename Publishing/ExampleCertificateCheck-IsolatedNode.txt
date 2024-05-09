@@ -1,0 +1,13 @@
+Checking validity of the certificate for 'https://signin.connect.aveva.com' issued by 'CN=E1, O=Let's Encrypt, C=US'
+	1: 'CN=DST Root CA X3, O=Digital Signature Trust Co.' from 'CN=DST Root CA X3, O=Digital Signature Trust Co.'
+The certificate 'CN=DST Root CA X3, O=Digital Signature Trust Co.' in the chain for 'https://signin.connect.aveva.com' expired 30-Sep-2021
+   This may be because of problems with your system time (09-May-2024) or because your trusted certificate authorities are out of date
+	2: 'CN=ISRG Root X1, O=Internet Security Research Group, C=US' from 'CN=DST Root CA X3, O=Digital Signature Trust Co.'
+		CRL: http://crl.identrust.com/DSTROOTCAX3CRL.crl
+	3: 'CN=ISRG Root X2, O=Internet Security Research Group, C=US' from 'CN=ISRG Root X1, O=Internet Security Research Group, C=US'
+		CRL: http://x1.c.lencr.org/
+	4: 'CN=E1, O=Let's Encrypt, C=US' from 'CN=ISRG Root X2, O=Internet Security Research Group, C=US'
+		CRL: http://x2.c.lencr.org/
+	5: 'CN=signin.connect.aveva.com' from 'CN=E1, O=Let's Encrypt, C=US'
+Validating the certifcate for 'https://signin.connect.aveva.com' timed out
+   This is likely because the certificate revocation list wasn't accessible
