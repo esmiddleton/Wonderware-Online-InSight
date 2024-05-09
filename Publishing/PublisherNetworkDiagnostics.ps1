@@ -10,7 +10,7 @@
 #    Insight Publisher
 #    DMZ Secure Link
 #
-# Modified: 8-May-2024
+# Modified: 9-May-2024
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -48,7 +48,7 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
-$ScriptRevision = "1.31"
+$ScriptRevision = "1.32"
 
 # Script utility variables
 $InsightUri = "https://" + $InsightHost
@@ -559,27 +559,40 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {
         param($sender, $certificate, $chain, $sslPolicyErrors)
 
-        Write-Verbose "$(fnLn): Checking validity of the certificate for '$Uri' issued by '$($Certificate.IssuerName.Name)'"
+        Write-Host "Checking validity of the certificate for '$Uri' issued by '$($Certificate.IssuerName.Name)'"
         #If ($sslPolicyErrors
 
         $problemFound = $false
+        $certIndex = 1
         #$chain.ChainElements | ForEach-Object {
         ($chain.ChainElements.Count-1)..0 | ForEach-Object {
             #$ce = $_
             $ce = $chain.ChainElements[$_]
             $cert = $ce.Certificate
-            Write-Verbose "`t$(fnLn): '$($cert.Subject)' from '$($cert.IssuerName.Name)'"
+            if ($VerbosePreference -eq "Continue" ) {
+                Write-Host -ForegroundColor Gray "`t$($certIndex): '$($cert.Subject)' from '$($cert.IssuerName.Name)'"
+            }
+            $certIndex += 1
 
+            $crlDistributionPoints = $cert.Extensions | Where-Object { $_.Oid.FriendlyName -eq "CRL Distribution Points" }
+
+            # Output the CRL Distribution Points
+            if ($VerbosePreference -eq "Continue" ) {
+                foreach ($point in $crlDistributionPoints) {
+                    $crl = ($point.Format(0) -split "URL=")[1]
+                    Write-Host -ForegroundColor Gray "`t`tCRL: $($crl)"
+                }
+            }
             if ([DateTime]::Now -gt $cert.NotAfter) {
                 Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy'))) or because your trusted certificate authorities are out of date"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy'))) or because your trusted certificate authorities are out of date"
                 $problemFound = $true
                 return $false
             }
 
             if ([DateTime]::Now -lt $cert.NotBefore) {
                 Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' is not valid until $($cert.NotBefore.ToString('dd-MMM-yyyy'))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy')))"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy')))"
                 $problemFound = $true
                 return $false
             }
@@ -587,7 +600,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
             if ($ce.ChainElementStatus.Status -eq [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::UntrustedRoot) {
                 # Self-signed certificates with an untrusted root
                 Write-Host -ForegroundColor Red "The root certificate for '$Uri' was not trusted"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause your trusted certificate authorities are out of date"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because your trusted certificate authorities are out of date"
                 $problemFound = $true
                 return $false
             }
@@ -604,7 +617,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
 
         if ((!$problemFound) -and ($sslPolicyErrors -ne [System.Net.Security.SslPolicyErrors]::None)) {
             Write-Host -ForegroundColor Red "The certificate for '$Uri' did not meet the policy requirements"
-            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of your group policy settings"
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of your group policy settings"
             $problemFound = $true
             return $false # Certificate is bad
         }
@@ -618,9 +631,9 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
         $CertRequest.Method = "GET"
 																	  
         $CertRequest.KeepAlive = $false
-        $CertRequest.Timeout = 2000
-        $CertRequest.ServicePoint.ConnectionLeaseTimeout = 2000
-        $CertRequest.ServicePoint.MaxIdleTime = 2000
+        $CertRequest.Timeout = 5000
+        $CertRequest.ServicePoint.ConnectionLeaseTimeout = 5000
+        $CertRequest.ServicePoint.MaxIdleTime = 5000
         if ( $ProxyUri -ne "" ) {
             $CertRequest.Proxy = New-Object System.Net.WebProxy($ProxyUri)
         }
@@ -629,11 +642,14 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
         if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::TrustFailure) {
             # We ignore trust failures, since we only want the certificate, and the service point is still populated at this point
             Write-Host -ForegroundColor Red "The certifcate for '$($Uri)' is not trusted"
-            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be beause of an upstream proxy or other security layer that is intercepting requests"
-        }
-        else
-        {
-            Write-Warning $_.Exception.Message
+            Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of an upstream proxy or other security layer that is intercepting requests"
+        } else {
+            if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::Timeout) {
+                Write-Host -ForegroundColor Yellow "Validating the certifcate for '$($Uri)' timed out"
+                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This is likely because the certificate revocation list wasn't accessible"
+            } else {
+                Write-Warning $_.Exception.Message
+            }
         }
     } catch {
         Write-Warning $_.Exception.Message
