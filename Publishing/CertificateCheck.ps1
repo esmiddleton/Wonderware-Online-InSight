@@ -26,7 +26,7 @@ function fnLN {
 }
 
 [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
-Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
+Function Report-CertValidity( $CertUri, $ProxyUri, $Owner ) {
     [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {
         param($sender, $certificate, $chain, $sslPolicyErrors)
         $UriToCheck = $sender.RequestUri.AbsoluteUri
@@ -95,29 +95,41 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     }
 
     try {
-        $CertRequest = [System.Net.HttpWebRequest]::Create($Uri)
+        if ( [Enum]::GetValues([Net.SecurityProtocolType]) -Like "Tls12" ) {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13 
+        }
+        [System.Net.ServicePointManager]::DefaultConnectionLimit = 1024
+
+        $noCachePolicy = New-Object System.Net.Cache.HttpRequestCachePolicy([System.Net.Cache.HttpRequestCacheLevel]::NoCacheNoStore)
+
+        $CertRequest = [System.Net.HttpWebRequest]::Create($CertUri)
         $CertRequest.Method = "GET"
 																	  
         $CertRequest.KeepAlive = $false
         $CertRequest.Timeout = 5000
         $CertRequest.ServicePoint.ConnectionLeaseTimeout = 5000
         $CertRequest.ServicePoint.MaxIdleTime = 5000
+        $CertRequest.CachePolicy = $noCachePolicy
         if ( $ProxyUri -ne "" ) {
             $CertRequest.Proxy = New-Object System.Net.WebProxy($ProxyUri)
+        } else {
+            $CertRequest.Proxy = $null
         }
-        $Reponse = $CertRequest.GetResponse()
+        $Response = $CertRequest.GetResponse()
+	    $Response.Dispose()
+ 	    $Response = $null
     } catch [System.Net.WebException] {
         if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::TrustFailure) {
             # We ignore trust failures, since we only want the certificate, and the service point is still populated at this point
-            Write-Host -ForegroundColor Red "The certifcate for '$($Uri)' is not trusted"
+            Write-Host -ForegroundColor Red "The certifcate for '$($CertUri)' is not trusted"
             Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of an upstream proxy or other security layer that is intercepting requests"
         } else {
             if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::Timeout) {
-                Write-Host -ForegroundColor Yellow "Validating the certifcate for '$($Uri)' timed out"
+                Write-Host -ForegroundColor Yellow "Validating the certifcate for '$($CertUri)' timed out"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This is likely because the certificate revocation list wasn't accessible"
             } else {
                 if ([int]$_.Exception.Status -eq 7) {
-                    Write-Host -ForegroundColor Yellow "Access to '$($Uri)' was denied"
+                    Write-Host -ForegroundColor Yellow "Access to '$($CertUri)' was denied"
                     Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This is likely because it was blocked by the proxy"
                 } else {
                     Write-Warning $_.Exception.Message
@@ -131,14 +143,14 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     if (($CertRequest.ServicePoint.Certificate) -and ($CertRequest.ServicePoint.Certificate.Handle -ne 0)) {
         if (!([String]::IsNullOrEmpty($Owner))) {
             if ($CertRequest.ServicePoint.Certificate.Subject -notlike $Owner) {
-                Write-Host -ForegroundColor Red "The '$($Uri)' appears to be impersonated by another issuer: $($CertRequest.ServicePoint.Certificate.Issuer)"
+                Write-Host -ForegroundColor Red "The '$($CertUri)' appears to be impersonated by another issuer: $($CertRequest.ServicePoint.Certificate.Issuer)"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   It may be getting replaced by an upstream proxy or other security layer"
             } else {
-                Write-Host -ForegroundColor Green "The certifcate for '$($Uri)' appears to be valid"
+                Write-Host -ForegroundColor Green "The certifcate for '$($CertUri)' appears to be valid"
             }
         }
     } else {
-        Write-Host -ForegroundColor Red "Unable to get certificate for '$($Uri)'"
+        Write-Host -ForegroundColor Red "Unable to get certificate for '$($CertUri)'"
         Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may mean requests are being intercepted by an upstream proxy or other security layer."
     }
     $CertRequest = $null
