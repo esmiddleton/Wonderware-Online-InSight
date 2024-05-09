@@ -19,7 +19,7 @@
 # ==============================================================
 
 
-$VerbosePreference = "Continue" # Include more detailed tracing output
+#$VerbosePreference = "Continue" # Include more detailed tracing output
 
 function fnLN {
     $MyInvocation.ScriptLineNumber
@@ -29,8 +29,9 @@ function fnLN {
 Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
     [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {
         param($sender, $certificate, $chain, $sslPolicyErrors)
+        $UriToCheck = $sender.RequestUri.AbsoluteUri
 
-        Write-Host "Checking validity of the certificate for '$Uri' issued by '$($Certificate.IssuerName.Name)'"
+        Write-Host "Checking validity of the certificate for '$UriToCheck' issued by '$($Certificate.IssuerName.Name)'"
         #If ($sslPolicyErrors
 
         $problemFound = $false
@@ -40,29 +41,25 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
             #$ce = $_
             $ce = $chain.ChainElements[$_]
             $cert = $ce.Certificate
-            if ($VerbosePreference -eq "Continue" ) {
-                Write-Host -ForegroundColor Gray "`t$($certIndex): '$($cert.Subject)' from '$($cert.IssuerName.Name)'"
-            }
+            Write-Host -ForegroundColor Gray "`t$($certIndex): '$($cert.Subject)' from '$($cert.IssuerName.Name)'"
             $certIndex += 1
 
             $crlDistributionPoints = $cert.Extensions | Where-Object { $_.Oid.FriendlyName -eq "CRL Distribution Points" }
 
             # Output the CRL Distribution Points
-            if ($VerbosePreference -eq "Continue" ) {
-                foreach ($point in $crlDistributionPoints) {
-                    $crl = ($point.Format(0) -split "URL=")[1]
-                    Write-Host -ForegroundColor Gray "`t`tCRL: $($crl)"
-                }
+            foreach ($point in $crlDistributionPoints) {
+                $crl = ($point.Format(0) -split "URL=")[1]
+                Write-Host -ForegroundColor Gray "`t`tCRL: $($crl)"
             }
             if ([DateTime]::Now -gt $cert.NotAfter) {
-                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
+                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$UriToCheck' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy'))) or because your trusted certificate authorities are out of date"
                 $problemFound = $true
                 return $false
             }
 
             if ([DateTime]::Now -lt $cert.NotBefore) {
-                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$Uri' is not valid until $($cert.NotBefore.ToString('dd-MMM-yyyy'))"
+                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$UriToCheck' is not valid until $($cert.NotBefore.ToString('dd-MMM-yyyy'))"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy')))"
                 $problemFound = $true
                 return $false
@@ -70,7 +67,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
 
             if ($ce.ChainElementStatus.Status -eq [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::UntrustedRoot) {
                 # Self-signed certificates with an untrusted root
-                Write-Host -ForegroundColor Red "The root certificate for '$Uri' was not trusted"
+                Write-Host -ForegroundColor Red "The root certificate for '$UriToCheck' was not trusted"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because your trusted certificate authorities are out of date"
                 $problemFound = $true
                 return $false
@@ -79,7 +76,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
             if (($ce.ChainElementStatus.Count -gt 0) -and ($ce.ChainElementStatus.Status -ne [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NoError)) {
                 # If there are any other errors in the certificate chain,
                 # the certificate is invalid, so the method returns false.
-                Write-Host -ForegroundColor Red "There where errors in the certificate '$($cert.Subject)' in the chain for '$Uri' ($($ce.ChainElementStatus.Status))"
+                Write-Host -ForegroundColor Red "There where errors in the certificate '$($cert.Subject)' in the chain for '$UriToCheck' ($($ce.ChainElementStatus.Status))"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Don't know why"
                 $problemFound = $true
                 return $false
@@ -87,7 +84,7 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
         }
 
         if ((!$problemFound) -and ($sslPolicyErrors -ne [System.Net.Security.SslPolicyErrors]::None)) {
-            Write-Host -ForegroundColor Red "The certificate for '$Uri' did not meet the policy requirements"
+            Write-Host -ForegroundColor Red "The certificate for '$UriToCheck' did not meet the policy requirements"
             Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of your group policy settings"
             $problemFound = $true
             return $false # Certificate is bad
@@ -119,7 +116,12 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
                 Write-Host -ForegroundColor Yellow "Validating the certifcate for '$($Uri)' timed out"
                 Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This is likely because the certificate revocation list wasn't accessible"
             } else {
-                Write-Warning $_.Exception.Message
+                if ([int]$_.Exception.Status -eq 7) {
+                    Write-Host -ForegroundColor Yellow "Access to '$($Uri)' was denied"
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This is likely because it was blocked by the proxy"
+                } else {
+                    Write-Warning $_.Exception.Message
+                }
             }
         }
     } catch {
@@ -144,4 +146,5 @@ Function Report-CertValidity( $Uri, $ProxyUri, $Owner ) {
 }
 
 # Usage: Report-CertValidity <UrlToCheck> [ <UrlForProxy> [ <CertOrganizationToMatch> ] ]
-Report-CertValidity "https://signin.connect.aveva.com" "http://100.65.80.200:8080" ""
+Report-CertValidity "https://signin.connect.aveva.com" "http://100.65.30.65:8888" ""
+Report-CertValidity "https://insight.connect.aveva.com" "http://100.65.30.65:8888" "*AVEVA*"
