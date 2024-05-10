@@ -19,7 +19,7 @@
 # ==============================================================
 
 
-#$VerbosePreference = "Continue" # Include more detailed tracing output
+$VerbosePreference = "Continue" # Include more detailed tracing output
 
 function fnLN {
     $MyInvocation.ScriptLineNumber
@@ -35,51 +35,57 @@ Function Report-CertValidity( $CertUri, $ProxyUri, $Owner ) {
         #If ($sslPolicyErrors
 
         $problemFound = $false
-        $certIndex = 1
-        #$chain.ChainElements | ForEach-Object {
-        ($chain.ChainElements.Count-1)..0 | ForEach-Object {
-            #$ce = $_
-            $ce = $chain.ChainElements[$_]
-            $cert = $ce.Certificate
-            Write-Host -ForegroundColor Gray "`t$($certIndex): '$($cert.Subject)' from '$($cert.IssuerName.Name)'"
-            $certIndex += 1
+        If (($sslPolicyErrors -ne [System.Net.Security.SslPolicyErrors]::None) -or ($VerbosePreference -eq "Continue")) {
+            $certIndex = 1
+            #$chain.ChainElements | ForEach-Object {
+            ($chain.ChainElements.Count-1)..0 | ForEach-Object {
+                #$ce = $_
+                $ce = $chain.ChainElements[$_]
+                $cert = $ce.Certificate
+                Write-Host -ForegroundColor Gray "`t$($certIndex): $($cert.Subject)' from '$(($cert.IssuerName.Name -split "," -split "=")[1]))"
+                $certIndex += 1
 
-            $crlDistributionPoints = $cert.Extensions | Where-Object { $_.Oid.FriendlyName -eq "CRL Distribution Points" }
+                $crlDistributionPoints = $cert.Extensions | Where-Object { $_.Oid.FriendlyName -eq "CRL Distribution Points" }
 
-            # Output the CRL Distribution Points
-            foreach ($point in $crlDistributionPoints) {
-                $crl = ($point.Format(0) -split "URL=")[1]
-                Write-Host -ForegroundColor Gray "`t`tCRL: $($crl)"
-            }
-            if ([DateTime]::Now -gt $cert.NotAfter) {
-                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$UriToCheck' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy'))) or because your trusted certificate authorities are out of date"
-                $problemFound = $true
-                return $false
-            }
+                # Output the CRL Distribution Points
+                foreach ($point in $crlDistributionPoints) {
+                    $crl = $point.Format(0) -split "URL=" -split "," | Where-Object {$_.ToString() -like "http*"}
+                    Write-Host -ForegroundColor Gray "`t`tCRL: $(($crl -join ", "))"
+                }
+                if ([DateTime]::Now -gt $cert.NotAfter) {
+                    Write-Host -ForegroundColor Red "`t`tThe certificate '$($cert.Subject)' in the chain for '$UriToCheck' expired $($cert.NotAfter.ToString('dd-MMM-yyyy'))"
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "`t`tThis may be because your trusted certificate authorities are out of date or because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy HH:mm')))"
+                    $problemFound = $true
+                    return $false
+                }
 
-            if ([DateTime]::Now -lt $cert.NotBefore) {
-                Write-Host -ForegroundColor Red "The certificate '$($cert.Subject)' in the chain for '$UriToCheck' is not valid until $($cert.NotBefore.ToString('dd-MMM-yyyy'))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy')))"
-                $problemFound = $true
-                return $false
-            }
+                if ([DateTime]::Now -lt $cert.NotBefore) {
+                    Write-Host -ForegroundColor Red "`t`tThe certificate '$($cert.Subject)' in the chain for '$UriToCheck' is not valid until $($cert.NotBefore.ToString('dd-MMM-yyyy'))"
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "`t`tThis may be because of problems with your system time ($([DateTime]::Now.ToString('dd-MMM-yyyy HH:mm')))"
+                    $problemFound = $true
+                    return $false
+                } else {
+                    If (([DateTime]::Now - $cert.NotBefore).TotalDays -lt 20) {
+                        Write-Host "`t`tThis is a relatively new certificate which became valid $($cert.NotBefore.ToString('dd-MMM-yyyy'))"
+                    }
+                }
 
-            if ($ce.ChainElementStatus.Status -eq [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::UntrustedRoot) {
-                # Self-signed certificates with an untrusted root
-                Write-Host -ForegroundColor Red "The root certificate for '$UriToCheck' was not trusted"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   This may be because your trusted certificate authorities are out of date"
-                $problemFound = $true
-                return $false
-            }
+                if ($ce.ChainElementStatus.Status -eq [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::UntrustedRoot) {
+                    # Self-signed certificates with an untrusted root
+                    Write-Host -ForegroundColor Red "`t`tThe root certificate for '$UriToCheck' was not trusted"
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "`t`tThis may be because your trusted certificate authorities are out of date"
+                    $problemFound = $true
+                    return $false
+                }
 
-            if (($ce.ChainElementStatus.Count -gt 0) -and ($ce.ChainElementStatus.Status -ne [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NoError)) {
-                # If there are any other errors in the certificate chain,
-                # the certificate is invalid, so the method returns false.
-                Write-Host -ForegroundColor Red "There where errors in the certificate '$($cert.Subject)' in the chain for '$UriToCheck' ($($ce.ChainElementStatus.Status))"
-                Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Don't know why"
-                $problemFound = $true
-                return $false
+                if (($ce.ChainElementStatus.Count -gt 0) -and ($ce.ChainElementStatus.Status -ne [System.Security.Cryptography.X509Certificates.X509ChainStatusFlags]::NoError)) {
+                    # If there are any other errors in the certificate chain,
+                    # the certificate is invalid, so the method returns false.
+                    Write-Host -ForegroundColor Red "`t`tThere where errors in the certificate '$($cert.Subject)' in the chain for '$UriToCheck' ($($ce.ChainElementStatus.Status))"
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "`t`tDon't know why"
+                    $problemFound = $true
+                    return $false
+                }
             }
         }
 
