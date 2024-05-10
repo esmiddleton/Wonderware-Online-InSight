@@ -24,6 +24,10 @@ A full diagnostics script to use to report on most network and Publisher-related
 
 Example output from running this script on the Publisher node and on the DMZ Secure Link node are also included. These results are based on the configuration described in the tutorial and use the same IP addresses shown there and in the summary illustration below.
 
+Getting Help
+------------
+If you need help getting publishing to work, there are a lot of details specific to your environment that you need to share. This worksheet can help capture many of those details. Some will not apply, but even capturing the fact that they don't apply can be a help. Complete the "Customer" tab and share it with whoever is providing assistance. See the "Example" tab to see what information is expected. 
+
 Manual Tests
 ------------
 The core of the more comprehensive "PublisherNetworkDiagnostics.ps1" script is a few Powershell commands to test ports and HTTP requests. For those who want to do their own targeted tests, the "ManualPublisherTests.ps1" provides some useful examples/reference.
