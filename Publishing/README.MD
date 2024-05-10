@@ -26,7 +26,7 @@ Example output from running this script on the Publisher node and on the DMZ Sec
 
 Getting Help
 ------------
-If you need help getting publishing to work, there are a lot of details specific to your environment that you need to share. This worksheet can help capture many of those details. Some will not apply, but even capturing the fact that they don't apply can be a help. Complete the "Customer" tab and share it with whoever is providing assistance. See the "Example" tab to see what information is expected. 
+If you need help getting publishing to work, there are a lot of details specific to your environment that you need to share. ![This worksheet](https://github.com/esmiddleton/Wonderware-Online-InSight/blob/master/Publishing/Insight%20Publishing%20Topology%20Worksheet.xlsx) can help capture many of those details. Some will not apply, but even capturing the fact that they don't apply can be a help. Complete the "Customer" tab and share it with whoever is providing assistance. See the "Example" tab to see what information is expected. 
 
 Manual Tests
 ------------
