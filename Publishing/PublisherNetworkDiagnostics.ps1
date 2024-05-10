@@ -51,7 +51,7 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
-$ScriptRevision = "1.35"
+$ScriptRevision = "1.36"
 
 # Script utility variables
 $InsightUri = "https://" + $InsightHost
@@ -782,12 +782,16 @@ Function Get-JSON( $path ) {
 }
 
 
-Function Report-DMZSelection( $fileName ) {
+Function Report-DMZSelection( $fileName,  $ProxyUri ) {
     try {
         $selection = Get-JSON( $DMZConfigPath + "\" + $fileName )
 
         if ( $null -ne $selection ) {
-            $products = Invoke-RestMethod $allowListUrl -Method 'GET' -Proxy $ProxyUri
+            if ($ProxyUri -ne "") {
+                $products = Invoke-RestMethod $allowListUrl -Method 'GET' -Proxy $ProxyUri
+            } else {
+                $products = Invoke-RestMethod $allowListUrl -Method 'GET'
+            }
 
             $list = ""
             $selection.SelectedProducts | ForEach-Object {
@@ -1133,7 +1137,7 @@ Report-ProxyFromConnectionFiles
 # Try to read local DMZ Secure Link configuration
 if ( ![String]::IsNullOrEmpty( (ValueFromRegistry "HKLM:\SOFTWARE\ArchestrA\SecureLink\Setup" "LaunchTarget") ) ) {
     $DMZProxies = Report-DMZConfig "Config.json"
-    Report-DMZSelection "SelectedFeatures.json"
+    Report-DMZSelection "SelectedFeatures.json" $ProxyUri
 }
 
 # Check for database problems
