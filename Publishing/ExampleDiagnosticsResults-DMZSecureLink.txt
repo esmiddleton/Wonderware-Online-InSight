@@ -1,9 +1,9 @@
-2024-02-24 11:48:19 -05:00
-PublisherNetworkDiagnostics.ps1 1.29 (03-May-2024 12:56)
+2024-05-10 11:48:19 -05:00
+PublisherNetworkDiagnostics.ps1 1.34 (10-May-2024 09:56)
 WinDMZ (DMZ workgroup)
 Windows 10 Pro (64-bit) 1909 (18363)
-Powershell 5.1 (64-bit), CLR 4.0.30319 (Standard User)
-User: WinDMZ\Lenka
+Powershell 5.1 (64-bit), CLR 4.0.30319 (3)
+User: WinDMZ\Lenka (Standard User)
 Powershell Security Protocols: Tls, Tls11, Tls12, Tls13
 .NET Require Strong Cryptography: No (default to TLS 1.0)
    Publisher versions released before Dec-2018 will not be able to connect to Insight
@@ -26,12 +26,13 @@ DMZ Secure Link is listening on port 8080 for all addresses using 10.1.1.10:8888
 DMZ Secure Link products: AVEVA Insight (Insight Browsing, Insight Publishing)
 Regions:  North America, Europe, Australia
 
-Testing connectivity to 'https://insight.connect.aveva.com' via proxy 'http://10.1.1.10:8888'
+Testing connectivity via upstream proxy 'http://100.1.1.10:8888'
 Route to proxy at '10.1.1.10' is on '192.168.2.15' via gateway of '192.168.2.11' using interface #5
 Successfully reached gateway at '192.168.2.11' via 'ping'
 Successfully resolved hostname 'insight.connect.aveva.com' to '104.40.63.98'
 Successfully reached proxy at '10.1.1.10' on port '8888'
 Successfully connected to 'https://insight.connect.aveva.com' via proxy
+Checking validity of the certificate for 'https://insight.connect.aveva.com/' issued by 'CN=DigiCert Global G2 TLS RSA SHA256 2020 CA1, O=DigiCert Inc, C=US'
 The certifcate for 'https://insight.connect.aveva.com' appears to be valid
 Access to 'http://www.apple.com' was NOT blocked
    If the proxy specified is DMZ Secure Link, that should be blocked. Other proxies might permit access.
@@ -50,5 +51,36 @@ Successfully reached 'fonts.gstatic.com' via proxy
 Successfully reached 'stats.g.doubleclick.net' via proxy
 Successfully reached 'cdn.connect.aveva.com' via proxy
 Successfully reached 'www.google-analytics.com' via proxy
- 
-Tests completed at 2024-02-24 11:48:31 -05:00
+
+Testing connectivity via local DMZ Secure Link proxy 'http://127.0.0.1:8080'
+Successfully resolved hostname 'insight.connect.aveva.com' to '104.40.63.98'
+Successfully reached proxy at '127.0.0.1' on port '8080'
+Successfully connected to 'https://insight.connect.aveva.com' via proxy
+Checking validity of the certificate for 'https://insight.connect.aveva.com/' issued by 'CN=DigiCert Global G2 TLS RSA SHA256 2020 CA1, O=DigiCert Inc, C=US'
+The certifcate for 'https://insight.connect.aveva.com' appears to be valid
+DMZ Secure Link correctly blocked access to 'http://www.apple.com'
+Successfully retrieved list of key URLs used by Insight from 'https://insight.connect.aveva.com'
+Successfully reached 'online.wonderware.com' via proxy
+Successfully reached 'online.wonderware.eu' via proxy
+Successfully reached 'online.wonderware.net.au' via proxy
+Successfully reached 'signin.connect.aveva.com' via proxy
+Successfully reached 'identity.connect.aveva.com' via proxy
+Successfully reached 'nch.online.wonderware.com' via proxy
+Successfully reached 'nch.online.wonderware.eu' via proxy
+Successfully reached 'nch-au.online.wonderware.com' via proxy
+Failed to reach optional host 'www.google.com' via proxy
+   This may mean the proxy is not correctly configured
+Access to 'https://www.google.com' was denied
+   This is likely because it was blocked by the proxy
+Successfully reached 'fonts.googleapis.com' via proxy
+Successfully reached 'fonts.gstatic.com' via proxy
+Successfully reached 'stats.g.doubleclick.net' via proxy
+Successfully reached 'cdn.connect.aveva.com' via proxy
+Successfully reached 'www.google-analytics.com' via proxy
+
+Testing connectivity without proxy ''
+Connection to 'https://insight.connect.aveva.com' failed due to a timeout (Status -2146233079)
+   There may be a problem in the network routing configuration or you may need to stop/restart Powershell
+
+Tests completed at 2024-05-10 11:48:19 -05:00
+
