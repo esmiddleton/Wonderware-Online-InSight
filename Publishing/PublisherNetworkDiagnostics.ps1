@@ -51,7 +51,7 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
-$ScriptRevision = "1.34"
+$ScriptRevision = "1.35"
 
 # Script utility variables
 $InsightUri = "https://" + $InsightHost
@@ -859,6 +859,20 @@ Function CheckWithProxy( $CurrentProxyUri, $ProxyType ) {
         $ProxyPort = $ProxyParts[1]
     }
 
+    if ($ProxyIP -ne "") {
+        # Check the route
+        Report-Route "proxy" $ProxyIP
+
+        # Confirm we can resolve the names (but only if these aren't IP address)
+        Report-Hostname ([System.Uri]$ProxyUri).Host $false
+        if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$UserProxy).Host ) {
+            Report-Hostname ([System.Uri]$UserProxy).Host $false
+        }
+        if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$SystemProxy).Host -and ([System.Uri]$SystemProxy).Host -notlike ([System.Uri]$UserProxy).Host ) {
+            Report-Hostname ([System.Uri]$SystemProxy).Host $false
+        }
+    }
+
     if (Report-Port "proxy" $ProxyIP $ProxyPort $false) {
 
         # Confirm the proxy can reach a AVEVA Insight endpoint
@@ -1134,22 +1148,6 @@ CheckForHotfix "Historian" $ReplicationPath "17.3.101" "2019.530.3636.2" "110963
 CheckForHotfix "Historian" $ReplicationPath "20.0.000" "2021.731.3133.2" "1109704" $false
 CheckForHotfix "Historian" $ReplicationPath "20.1.100" "2021.731.3133.5" "1208899" $false
 Write-Host " "
-
-if ($ProxyIP -ne "") {
-    Write-Host  "Testing connectivity to '$($InsightUri)' via proxy '$($ProxyUri)'"
-
-    # Check the route
-    Report-Route "proxy" $ProxyIP
-
-    # Confirm we can resolve the names (but only if these aren't IP address)
-    Report-Hostname ([System.Uri]$ProxyUri).Host $false
-    if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$UserProxy).Host ) {
-        Report-Hostname ([System.Uri]$UserProxy).Host $false
-    }
-    if ( ([System.Uri]$ProxyUri).Host -notlike ([System.Uri]$SystemProxy).Host -and ([System.Uri]$SystemProxy).Host -notlike ([System.Uri]$UserProxy).Host ) {
-        Report-Hostname ([System.Uri]$SystemProxy).Host $false
-    }
-}
 
 # Use variations on the lines below, uncommented, for other test cases
 #Check-Port "rdp" "myhostname" 3389
