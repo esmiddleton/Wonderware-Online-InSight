@@ -13,7 +13,7 @@
 # For more detailed diagnostics are still needed, swap which "$VerbosePreference" is commented out
 # in lines 44-45 below to so that "Continue" is used.
 #
-# Modified: 10-May-2024
+# Modified: 16-Dec-2024
 # By:       E. Middleton
 #
 # To enable Powershell scripts use:
@@ -51,7 +51,7 @@ $DMZConfigPath = "$env:ProgramData\ArchestrA\Historian\DMZ\Configuration"
 # END OF SITE-SPECIFIC SETTINGS
 # ==============================================================
 
-$ScriptRevision = "1.36"
+$ScriptRevision = "1.37"
 
 # Script utility variables
 $InsightUri = "https://" + $InsightHost
@@ -733,6 +733,29 @@ Function GetFileVersion( $Label, $Path ) {
     return $info
 }
 
+Function Compare-Version {
+    param (
+        [string]$version1,
+        [string]$version2
+    )
+
+    $parts1 = $version1 -split '\.'
+    $parts2 = $version2 -split '\.'
+
+    for ($i = 0; $i -lt [math]::Max($parts1.Length, $parts2.Length); $i++) {
+        $part1 = if ($i -lt $parts1.Length) { [int]$parts1[$i] } else { 0 }
+        $part2 = if ($i -lt $parts2.Length) { [int]$parts2[$i] } else { 0 }
+
+        if ($part1 -gt $part2) {
+            return 1
+        } elseif ($part1 -lt $part2) {
+            return -1
+        }
+    }
+
+    return 0
+}
+
 Function CheckForHotfix( $Label, $Path, $ProductVersion, $FileVersion, $Hotfix, $isMinVer ) {
     if ( (![String]::IsNullOrEmpty($Path)) -and (Test-Path $Path -PathType leaf)) {
         
@@ -744,7 +767,7 @@ Function CheckForHotfix( $Label, $Path, $ProductVersion, $FileVersion, $Hotfix, 
             Write-Host -ForegroundColor Red $Info
             Write-Host -BackgroundColor Black -ForegroundColor Cyan "   Can still connect, but expect problems later if you do not upgrade to $($ProductVersion.Substring(0,4)) or later"
         } else {
-            if ( ($FileInfo.ProductVersion -eq $ProductVersion) -and ($FileInfo.FileVersion -lt $FileVersion) ) {
+            if ( ($FileInfo.ProductVersion -eq $ProductVersion) -and ((Check-Version $FileInfo.FileVersion $FileVersion) -lt 0 )) {
                 $info = $Label + " " + $ProductVersion + " requires '" + $FileInfo.OriginalFilename + "'"
                 $info +=" to be " + $FileVersion + " but you have "
                 $info += $FileInfo.FileVersion
