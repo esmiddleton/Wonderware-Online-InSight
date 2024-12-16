@@ -960,8 +960,8 @@ Function CheckWithProxy( $CurrentProxyUri, $ProxyType ) {
                 }
             } else {
                 if ($HttpResult -eq -2146233079) {
-                    Write-Host -ForegroundColor Red "Connection to '$($InsightUri)' failed due to a timeout (Status $(Get-StatusText($HttpResult)))"
-                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   There may be a problem in the network routing configuration or you may need to stop/restart Powershell"
+                    Write-Host -ForegroundColor Red "Connection to '$($InsightUri)' failed to open the TLS connection (Status $(Get-StatusText($HttpResult)))"
+                    Write-Host -BackgroundColor Black -ForegroundColor Cyan "   There may be a problem in the enabled TLS protocols or the certificates"
                 } else {        
                     if ($HttpResult -eq -9) {
                         Report-CertValidity $InsightUri $ProxyUri ""
