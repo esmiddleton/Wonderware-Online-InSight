@@ -27,7 +27,7 @@
 # BEFORE USING: Update the variables below for your environment
 #
 
-# PROXY: If using DMZ Secure Link, use the IP address of the computer running it and the configured port 
+# PROXY: If using an upstream DMZ Secure Link, use the IP address of the computer running it and the configured port 
 # To use the user proxy configured in Windows' "Internet Options" settings, leave these proxy settings blank
 $ProxyIP = ""
 $ProxyPort = ""
