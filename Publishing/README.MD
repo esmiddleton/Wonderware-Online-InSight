@@ -9,7 +9,7 @@ Although these tools can be useful in other architectures, they assume the Publi
 
 Tutorial
 --------
-There is also a [brief video tutorial](https://www.aveva.com/en/perspectives/blog/insight-dmz-securelink "Watch") describing the architecture and network configuration
+There is also a [brief video tutorial](https://www.youtube.com/watch?v=5ABdq7KvQDU "Watch") describing the architecture and network configuration
 
 Publisher Network Diagnostics
 -----------------------------
